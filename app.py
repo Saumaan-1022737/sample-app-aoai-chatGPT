@@ -1,5 +1,6 @@
 import copy
 import json
+import base64
 import os
 import logging
 import uuid
@@ -41,8 +42,6 @@ from backend.utils import (
 )
 from azure.storage.blob.aio import BlobServiceClient
 
-os.environ['AZURE_STORAGE_ACCOUNT_NAME'] = "sawmsaoai90e0"
-os.environ['AZURE_BLOB_CONTAINER_NAME'] = "testing"
 
 async def get_blob_service_client():
     credential = DefaultAzureCredential()
@@ -93,14 +92,17 @@ async def favicon():
 @bp.route("/file_edit", methods=["GET", "POST"])  
 async def file_edit():  
     error_message = None 
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)  
-    print("user_id", authenticated_user)  
+    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
+    email_address = next((claim['val'] for claim in auth_data['claims'] if claim['typ'] == 'preferred_username'), None)
+    print("email_address:", email_address)
   
     if request.method == "POST":  
         form = await request.form  
         if 'container_name' in form:  
             container_name = form['container_name']  
-            session['container_name'] = container_name  
+            session['container_name'] = container_name
+            print("container_name", container_name)
         else:  
             files = await request.files  
             file = files.get("file")  
@@ -129,7 +131,7 @@ async def file_edit():
         container_client = blob_service_client.get_container_client(container_name)  
         blob_list = [blob async for blob in container_client.list_blobs()]  
     except Exception as e:  
-        error_message = f"Error: The specified container does not exist\n.{e}"
+        error_message = f"Error: The specified container does not exist.\n\n{e}"  
         blob_list = []  
     finally:  
         await blob_service_client.close()  
@@ -150,11 +152,10 @@ async def delete_file(blob_name):
         await blob_client.delete_blob()  
     except Exception as e:  
         flash(f"Error: {str(e)}")  
-    finally:  
+    finally:
         await blob_service_client.close()  
         await credential.close()  
     return redirect(url_for("routes.file_edit")) 
-
 
 @bp.route("/assets/<path:path>")
 async def assets(path):
