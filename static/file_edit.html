@@ -1,0 +1,48 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <title>File Edit</title>  
+    <style>  
+        .alert {  
+            padding: 15px;  
+            margin-bottom: 20px;  
+            border: 1px solid transparent;  
+            border-radius: 4px;  
+        }  
+        .alert-danger {  
+            color: #a94442;  
+            background-color: #f2dede;  
+            border-color: #ebccd1;  
+        }  
+    </style>  
+</head>  
+<body>  
+    <h1>File Edit</h1>  
+    <form action="/file_edit" method="post">  
+        <label for="container_name">Container Name:</label>  
+        <input type="text" id="container_name" name="container_name" value="{{ session.get('container_name', '') }}">  
+        <button type="submit">Set Container</button>  
+    </form>  
+    <form action="/file_edit" method="post" enctype="multipart/form-data">  
+        <input type="file" name="file">  
+        <button type="submit">Upload</button>  
+    </form>  
+    <h2>Existing Files</h2>  
+    <ul>  
+        {% for blob in blobs %}  
+            <li>  
+                {{ blob.name }}  
+                <form action="/delete_file/{{ blob.name }}" method="post" style="display:inline;">  
+                    <button type="submit">Delete</button>  
+                </form>  
+            </li>  
+        {% endfor %}  
+    </ul>  
+    {% if error_message %}  
+        <div class="alert alert-danger">  
+            {{ error_message }}  
+        </div>  
+    {% endif %}  
+</body>  
+</html>  

@@ -14,6 +14,10 @@ from quart import (
     send_from_directory,
     render_template,
     current_app,
+    redirect, 
+    url_for,
+    flash,
+    session,
 )
 
 from openai import AsyncAzureOpenAI
@@ -35,6 +39,18 @@ from backend.utils import (
     convert_to_pf_format,
     format_pf_non_streaming_response,
 )
+from azure.storage.blob.aio import BlobServiceClient
+
+os.environ['AZURE_STORAGE_ACCOUNT_NAME'] = "sawmsaoai90e0"
+os.environ['AZURE_BLOB_CONTAINER_NAME'] = "testing"
+
+async def get_blob_service_client():
+    credential = DefaultAzureCredential()
+    account_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net"
+    # Create BlobServiceClient using the credential
+    blob_service_client = BlobServiceClient(account_url, credential=credential)
+    return blob_service_client, credential
+
 
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
@@ -43,6 +59,7 @@ cosmos_db_ready = asyncio.Event()
 
 def create_app():
     app = Quart(__name__)
+    app.secret_key = 'key'
     app.register_blueprint(bp)
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     
@@ -71,6 +88,72 @@ async def index():
 @bp.route("/favicon.ico")
 async def favicon():
     return await bp.send_static_file("favicon.ico")
+
+
+@bp.route("/file_edit", methods=["GET", "POST"])  
+async def file_edit():  
+    error_message = None 
+    authenticated_user = get_authenticated_user_details(request_headers=request.headers)  
+    print("user_id", authenticated_user)  
+  
+    if request.method == "POST":  
+        form = await request.form  
+        if 'container_name' in form:  
+            container_name = form['container_name']  
+            session['container_name'] = container_name  
+        else:  
+            files = await request.files  
+            file = files.get("file")  
+            if file:  
+                blob_service_client, credential = await get_blob_service_client()  
+                try:  
+                    container_name = session.get('container_name')  
+                    if not container_name:  
+                        error_message = "Please provide a correct container name."  
+                    else:  
+                        blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
+                        await blob_client.upload_blob(file.stream, overwrite=True)  
+                except Exception as e:  
+                    error_message = f"Error: {str(e)}"  
+                finally:  
+                    await blob_service_client.close()  
+                    await credential.close()  
+  
+    container_name = session.get('container_name')  
+    if not container_name:  
+        error_message = "Please provide a container name."  
+        return await render_template("file_edit.html", error_message=error_message, blobs=[])  
+  
+    blob_service_client, credential = await get_blob_service_client()  
+    try:  
+        container_client = blob_service_client.get_container_client(container_name)  
+        blob_list = [blob async for blob in container_client.list_blobs()]  
+    except Exception as e:  
+        error_message = f"Error: The specified container does not exist."  
+        blob_list = []  
+    finally:  
+        await blob_service_client.close()  
+        await credential.close()  
+  
+    return await render_template("file_edit.html", error_message=error_message, blobs=blob_list)  
+  
+@bp.route("/delete_file/<blob_name>", methods=["POST"])  
+async def delete_file(blob_name):  
+    container_name = session.get('container_name')  
+    if not container_name:  
+        flash("Please provide a container name.")  
+        return redirect(url_for("routes.file_edit"))  
+  
+    blob_service_client, credential = await get_blob_service_client()  
+    try:  
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)  
+        await blob_client.delete_blob()  
+    except Exception as e:  
+        flash(f"Error: {str(e)}")  
+    finally:  
+        await blob_service_client.close()  
+        await credential.close()  
+    return redirect(url_for("routes.file_edit")) 
 
 
 @bp.route("/assets/<path:path>")
