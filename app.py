@@ -129,7 +129,7 @@ async def file_edit():
         container_client = blob_service_client.get_container_client(container_name)  
         blob_list = [blob async for blob in container_client.list_blobs()]  
     except Exception as e:  
-        error_message = f"Error: The specified container does not exist."  
+        error_message = f"Error: The specified container does not exist\n.{e}"
         blob_list = []  
     finally:  
         await blob_service_client.close()  
