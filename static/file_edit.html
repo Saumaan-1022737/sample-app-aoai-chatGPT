@@ -46,10 +46,10 @@
         <input type="file" id="file" name="file" onchange="checkFormFields()">  
         <br><br>  
         <label for="file_name">File Name:</label>  
-        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()">  
+        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()" value="{{ session.get('file_name', '') }}">  
         <br><br>  
         <label for="url">URL:</label>  
-        <input type="text" id="url" name="url" oninput="checkFormFields()">  
+        <input type="text" id="url" name="url" oninput="checkFormFields()" value="{{ session.get('url', '') }}">  
         <br><br>  
         <button type="submit" id="upload_button" class="disabled">Upload</button>  
     </form>  
