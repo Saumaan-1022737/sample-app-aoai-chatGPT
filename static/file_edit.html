@@ -15,7 +15,25 @@
             background-color: #f2dede;  
             border-color: #ebccd1;  
         }  
+        .disabled {  
+            pointer-events: none;  
+            opacity: 0.5;  
+        }  
     </style>  
+    <script>  
+        function checkFormFields() {  
+            var fileInput = document.getElementById("file");
+            var fileNameInput = document.getElementById("file_name");  
+            var urlInput = document.getElementById("url");  
+            var uploadButton = document.getElementById("upload_button");  
+            
+            if (fileInput.value && fileNameInput.value && urlInput.value) {  
+                uploadButton.classList.remove("disabled");  
+            } else {  
+                uploadButton.classList.add("disabled");  
+            }  
+        }
+    </script>  
 </head>  
 <body>  
     <h1>File Edit</h1>  
@@ -25,8 +43,15 @@
         <button type="submit">Set Container</button>  
     </form>  
     <form action="/file_edit" method="post" enctype="multipart/form-data">  
-        <input type="file" name="file">  
-        <button type="submit">Upload</button>  
+        <input type="file" id="file" name="file" onchange="checkFormFields()">  
+        <br><br>  
+        <label for="file_name">File Name:</label>  
+        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()">  
+        <br><br>  
+        <label for="url">URL:</label>  
+        <input type="text" id="url" name="url" oninput="checkFormFields()">  
+        <br><br>  
+        <button type="submit" id="upload_button" class="disabled">Upload</button>  
     </form>  
     <h2>Existing Files</h2>  
     <ul>  
@@ -45,4 +70,4 @@
         </div>  
     {% endif %}  
 </body>  
-</html>  
+</html>
