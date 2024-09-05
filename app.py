@@ -113,12 +113,12 @@ async def file_edit():
                     if not container_name:  
                         error_message = "Please provide a correct container name."  
                     else:
-                        file_name_metadata =session['file_name']
-                        url_metadata =session['url']
+                        file_name_metadata =files['file_name']
+                        url_metadata =files['url']
                         print("file_name_metadata", file_name_metadata)
                         print("url_metadata", url_metadata)
                         blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
-                        await blob_client.upload_blob(file.stream, overwrite=True, metadata={'url_metadata': session['url'], 'file_name_metadata':session['file_name']})  
+                        await blob_client.upload_blob(file.stream, overwrite=True, metadata={'url_metadata': files['url'], 'file_name_metadata':files['file_name']})  
                 except Exception as e:  
                     error_message = f"Error: {str(e)}"  
                 finally:  
