@@ -253,7 +253,7 @@ class Document(object):
         content (str): The content of the document.
         id (Optional[str]): The id of the document.
         title (Optional[str]): The title of the document.
-        filepath (Optional[str]): The filepath of the document.
+        url_metadata (Optional[str]): The url_metadata of the document.
         url (Optional[str]): The url of the document.
         metadata (Optional[Dict]): The metadata of the document.    
     """
@@ -261,7 +261,7 @@ class Document(object):
     content: str
     id: Optional[str] = None
     title: Optional[str] = None
-    filepath: Optional[str] = None
+    url_metadata: Optional[str] = None
     url: Optional[str] = None
     metadata: Optional[Dict] = None
     contentVector: Optional[List[float]] = None
@@ -1116,7 +1116,7 @@ def process_file(
             captioning_model_key=captioning_model_key
         )
         for chunk_idx, chunk_doc in enumerate(result.chunks):
-            chunk_doc.filepath = rel_file_path
+            chunk_doc.url_metadata = rel_file_path
             chunk_doc.metadata = json.dumps({"chunk_id": str(chunk_idx)})
             chunk_doc.image_mapping = json.dumps(chunk_doc.image_mapping) if chunk_doc.image_mapping else None
     except Exception as e:

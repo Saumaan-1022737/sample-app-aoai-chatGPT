@@ -13,11 +13,12 @@ export type Citation = {
   content: string
   id: string
   title: string | null
-  filepath: string | null
+  url_metadata: string | null
   url: string | null
   metadata: string | null
   chunk_id: string | null
   reindex_id: string | null
+  url_metadata: string | null
 }
 
 export type ToolMessageContent = {

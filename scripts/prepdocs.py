@@ -39,7 +39,7 @@ def create_search_index(index_name, index_client):
                 SearchableField(
                     name="title", type="Edm.String", analyzer_name="en.lucene"
                 ),
-                SearchableField(name="filepath", type="Edm.String"),
+                SearchableField(name="url_metadata", type="Edm.String"),
                 SearchableField(name="url", type="Edm.String"),
                 SearchableField(name="metadata", type="Edm.String"),
                 SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),

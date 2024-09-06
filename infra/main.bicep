@@ -23,7 +23,7 @@ param searchSemanticSearchConfig string = 'default'
 param searchTopK int = 5
 param searchEnableInDomain bool = true
 param searchContentColumns string = 'content'
-param searchFilenameColumn string = 'filepath'
+param searchFilenameColumn string = 'url_metadata'
 param searchTitleColumn string = 'title'
 param searchUrlColumn string = 'url'
 
