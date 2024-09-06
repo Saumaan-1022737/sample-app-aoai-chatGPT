@@ -7,7 +7,7 @@ import { enumerateCitations, parseAnswer, ParsedAnswer } from './AnswerParser' /
 const sampleCitations: Citation[] = [
   {
     id: 'doc1',
-    url_metadata: 'file1.pdf',
+    filepath: 'file1.pdf',
     part_index: undefined,
     content: '',
     title: null,
@@ -18,7 +18,7 @@ const sampleCitations: Citation[] = [
   },
   {
     id: 'doc2',
-    url_metadata: 'file1.pdf',
+    filepath: 'file1.pdf',
     part_index: undefined,
     content: '',
     title: null,
@@ -29,7 +29,7 @@ const sampleCitations: Citation[] = [
   },
   {
     id: 'doc3',
-    url_metadata: 'file2.pdf',
+    filepath: 'file2.pdf',
     part_index: undefined,
     content: '',
     title: null,
@@ -47,7 +47,7 @@ const sampleAnswer: AskResponse = {
 }
 
 describe('enumerateCitations', () => {
-  it('assigns unique part_index based on url_metadata', () => {
+  it('assigns unique part_index based on filepath', () => {
     const results = enumerateCitations(cloneDeep(sampleCitations))
     expect(results[0].part_index).toEqual(1)
     expect(results[1].part_index).toEqual(2)

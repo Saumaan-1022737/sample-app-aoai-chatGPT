@@ -128,7 +128,7 @@ def upsert_documents_to_index(
         finalDocChunk:dict = {}
         finalDocChunk["_id"] = f"doc:{uuid.uuid4()}"
         finalDocChunk['title'] = document.title
-        finalDocChunk["url_metadata"] = document.url_metadata
+        finalDocChunk["filepath"] = document.filepath
         finalDocChunk["url"] = document.url
         finalDocChunk["content"] = document.content
         finalDocChunk["contentvector"] = document.contentVector

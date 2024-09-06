@@ -11,12 +11,12 @@ export type ParsedAnswer = {
 export const enumerateCitations = (citations: Citation[]) => {
   const filepathMap = new Map()
   for (const citation of citations) {
-    const { url_metadata } = citation
+    const { filepath } = citation
     let part_i = 1
-    if (filepathMap.has(url_metadata)) {
-      part_i = filepathMap.get(url_metadata) + 1
+    if (filepathMap.has(filepath)) {
+      part_i = filepathMap.get(filepath) + 1
     }
-    filepathMap.set(url_metadata, part_i)
+    filepathMap.set(filepath, part_i)
     citation.part_index = part_i
   }
   return citations

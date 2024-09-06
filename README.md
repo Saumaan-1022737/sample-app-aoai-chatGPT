@@ -392,7 +392,7 @@ Next, enable logging on the app service. Go to "App Service logs" under Monitori
 Now, you should be able to see logs from your app by viewing "Log stream" under Monitoring.
 
 ### Changing Citation Display
-The Citation panel is defined at the end of `frontend/src/pages/chat/Chat.tsx`. The citations returned from Azure OpenAI On Your Data will include `content`, `title`, `url_metadata`, and in some cases `url`. You can customize the Citation section to use and display these as you like. For example, the title element is a clickable hyperlink if `url` is not a blob URL.
+The Citation panel is defined at the end of `frontend/src/pages/chat/Chat.tsx`. The citations returned from Azure OpenAI On Your Data will include `content`, `title`, `filepath`, and in some cases `url`. You can customize the Citation section to use and display these as you like. For example, the title element is a clickable hyperlink if `url` is not a blob URL.
 
 ```
     <h5 

@@ -192,7 +192,7 @@ def create_or_update_search_index(
                 "analyzer": f"{language}.lucene" if language else None,
             },
             {
-                "name": "url_metadata",
+                "name": "filepath",
                 "type": "Edm.String",
                 "searchable": True,
                 "sortable": False,

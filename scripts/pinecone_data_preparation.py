@@ -109,13 +109,13 @@ def upsert_documents_to_index(
         finalDocChunk:dict = {}
         finalDocChunk["id"] = f"{uuid.uuid4()}"
         finalDocChunk['title'] = document.title
-        finalDocChunk["url_metadata"] = document.url_metadata
+        finalDocChunk["filepath"] = document.filepath
         finalDocChunk["url"] = ""
         finalDocChunk["content"] = document.content
         finalDocChunk["contentvector"] = document.contentVector
 
         try:
-            index.upsert([(finalDocChunk["id"],finalDocChunk["contentvector"], {"title":finalDocChunk['title'], "url_metadata":finalDocChunk['url_metadata'],"url":finalDocChunk['url'],"content":finalDocChunk['content']})])
+            index.upsert([(finalDocChunk["id"],finalDocChunk["contentvector"], {"title":finalDocChunk['title'], "filepath":finalDocChunk['filepath'],"url":finalDocChunk['url'],"content":finalDocChunk['content']})])
 
             print(f"Upsert doc chunk {document.id} successfully")
         
