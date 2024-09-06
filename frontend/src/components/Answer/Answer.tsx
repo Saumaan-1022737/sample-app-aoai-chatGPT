@@ -73,14 +73,14 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       const part_i = citation.part_index ?? (citation.chunk_id ? parseInt(citation.chunk_id) + 1 : '')
       if (truncate && citation.url_metadata.length > filePathTruncationLimit) {
         const citationLength = citation.url_metadata.length
-        citationFilename = `${citation.url_metadata.substring(0, 20)}...${citation.url_metadata.substring(citationLength - 20)} - Part ${part_i}`
+        citationFilename = citation.url_metadata
       } else {
-        citationFilename = `${citation.url_metadata} - Part ${part_i}`
+        citationFilename = citation.url_metadata
       }
     } else if (citation.url_metadata && citation.reindex_id) {
-      citationFilename = `${citation.url_metadata} - Part ${citation.reindex_id}`
+      citationFilename = citation.url_metadata
     } else {
-      citationFilename = `Citation ${index}`
+      citationFilename = `Citation ${citation.url_metadata}`
     }
     return citationFilename
   }
