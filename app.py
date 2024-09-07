@@ -96,6 +96,8 @@ async def file_edit():
     auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = next((claim['val'] for claim in auth_data['claims'] if claim['typ'] == 'preferred_username'), None)
     print("email_address:", email_address)
+    session['email_address'] = email_address
+
   
     if request.method == "POST":  
         form = await request.form  
@@ -113,12 +115,12 @@ async def file_edit():
                     if not container_name:  
                         error_message = "Please provide a correct container name."  
                     else:
-                        file_name_metadata =form['file_name']
-                        url_metadata =form['url']
-                        print("file_name_metadata", file_name_metadata)
-                        print("url_metadata", url_metadata)
+                        metadata={'url_metadata': form['url'], 
+                                  'file_name_metadata':form['file_name'],
+                                  'uploaded_by': email_address}
+
                         blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
-                        await blob_client.upload_blob(file.stream, overwrite=True, metadata={'url_metadata': form['url'], 'file_name_metadata':form['file_name']})  
+                        await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
                 except Exception as e:  
                     error_message = f"Error: {str(e)}"  
                 finally:  
