@@ -96,7 +96,7 @@ async def file_edit():
     auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = next((claim['val'] for claim in auth_data['claims'] if claim['typ'] == 'preferred_username'), None)
     print("email_address:", email_address)
-    session['email_address'] = email_address
+    session['email_address'] = authenticated_user
 
   
     if request.method == "POST":  
