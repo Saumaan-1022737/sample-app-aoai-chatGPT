@@ -93,10 +93,10 @@ async def favicon():
 async def file_edit():  
     error_message = None 
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
-    email_address = next((claim['val'] for claim in auth_data['claims'] if claim['typ'] == 'preferred_username'), None)
+    # auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
+    email_address = authenticated_user['user_name']
     print("email_address:", email_address)
-    session['email_address'] = authenticated_user
+    session['email_address'] = email_address
 
   
     if request.method == "POST":  
