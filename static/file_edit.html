@@ -35,7 +35,11 @@
         }
     </script>  
 </head>  
-<body>  
+<body> 
+    <div class="form-group">
+        <label for="email_address">Email Address:</label>  
+        <input type="text" id="email_address" name="email_address" value="{{ session.get('email_address', '') }}" readonly>  
+    </div> 
     <h1>File Edit</h1>  
     <form action="/file_edit" method="post">  
         <label for="container_name">Container Name:</label>  
