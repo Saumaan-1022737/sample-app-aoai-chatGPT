@@ -43,6 +43,7 @@ from backend.utils import (
 from azure.storage.blob.aio import BlobServiceClient
 
 
+
 async def get_blob_service_client():
     credential = DefaultAzureCredential()
     account_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net"

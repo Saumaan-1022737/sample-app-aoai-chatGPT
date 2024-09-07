@@ -1,0 +1,32 @@
+settings.py
+
+_AzureOpenAISettings -> 
+	1. ensure_endpoint() ==> select endpoints for CHAT & RAG ==> f"https://{self.resource}.openai.azure.com"
+	2. extract_embedding_dependency()  ==> embedding endpoints ==>  {
+                    "type": "endpoint",
+                    "endpoint": self.embedding_endpoint,
+                    "authentication": {
+                        "type": "system_assigned_managed_identity"
+                    }
+                }
+
+_SearchCommonSettings -> RAG search ==> role_information: str = Field(
+        default="You are an AI assistant that helps people find information.",
+        validation_alias="AZURE_OPENAI_SYSTEM_MESSAGE"
+    )
+
+
+
+_AzureSearchSettings -> Azure AI Search uses SearchCommonSettings
+	1. index -> to select index
+	2. filename_column: Optional[str] = Field(default=None, exclude=True) ==> similar for metadata
+	3. return -> return {
+            "type": self._type,
+            "parameters": parameters
+        }
+
+
+main.py
+	1. init_openai_client() -> access AzureOpenAISettings() using ==> app_settings.azure_openai
+	2. prepare_model_args() -> access AzureSearchSettings() for RAG using ==> app_settings.datasource
+

@@ -71,16 +71,6 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
 
     if (citation.filepath) {
       const part_i = citation.part_index ?? (citation.chunk_id ? parseInt(citation.chunk_id) + 1 : '')
-<<<<<<< HEAD
-      if (truncate && citation.url_metadata.length > filePathTruncationLimit) {
-        const citationLength = citation.url_metadata.length
-        citationFilename = citation.url_metadata
-      } else {
-        citationFilename = citation.url_metadata
-      }
-    } else if (citation.url_metadata && citation.reindex_id) {
-      citationFilename = citation.url_metadata
-=======
       if (truncate && citation.filepath.length > filePathTruncationLimit) {
         const citationLength = citation.filepath.length
         citationFilename = `${citation.filepath.substring(0, 20)}...${citation.filepath.substring(citationLength - 20)} - Part ${part_i}`
@@ -89,7 +79,6 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       }
     } else if (citation.filepath && citation.reindex_id) {
       citationFilename = `${citation.filepath} - Part ${citation.reindex_id}`
->>>>>>> parent of 953c2a8 (url metadata update)
     } else {
       citationFilename = `Citation ${citation.url_metadata}`
     }
