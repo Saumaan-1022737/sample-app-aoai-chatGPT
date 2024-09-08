@@ -65,23 +65,6 @@ class _ChatHistorySettings(BaseSettings):
     conversations_container: str
     enable_feedback: bool = False
 
-
-class _PromptflowSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="PROMPTFLOW_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-
-    endpoint: str
-    api_key: str
-    response_timeout: float = 30.0
-    request_field_name: str = "query"
-    response_field_name: str = "reply"
-    citations_field_name: str = "documents"
-
-
 class _AzureOpenAIFunction(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
@@ -251,7 +234,9 @@ class _AzureSearchSettings(BaseSettings, DatasourcePayloadConstructor):
     enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
     service: str = Field(exclude=True)
     endpoint_suffix: str = Field(default="search.windows.net", exclude=True)
-    index: str = Field(serialization_alias="index_name")
+    index_1: str = Field(serialization_alias="index_name_1")
+    index_2: str = Field(serialization_alias="index_name_2")
+    index_3: str = Field(serialization_alias="index_name_3")
     key: Optional[str] = Field(default=None, exclude=True)
     use_semantic_search: bool = Field(default=False, exclude=True)
     semantic_search_config: str = Field(default="", serialization_alias="semantic_configuration")
@@ -344,6 +329,9 @@ class _AzureSearchSettings(BaseSettings, DatasourcePayloadConstructor):
         parameters = self.model_dump(exclude_none=True, by_alias=True)
         parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
         
+        print ("datasource:\n", {
+            "type": self._type,
+            "parameters": parameters})
         return {
             "type": self._type,
             "parameters": parameters
@@ -419,331 +407,7 @@ class _AzureCosmosDbMongoVcoreSettings(
         return {
             "type": self._type,
             "parameters": parameters
-        }
-
-
-class _ElasticsearchSettings(BaseSettings, DatasourcePayloadConstructor):
-    model_config = SettingsConfigDict(
-        env_prefix="ELASTICSEARCH_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["elasticsearch"] = PrivateAttr(default="elasticsearch")
-    top_k: int = Field(default=5, serialization_alias="top_n_documents")
-    strictness: int = 3
-    enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
-    endpoint: str
-    encoded_api_key: str = Field(exclude=True)
-    index: str = Field(serialization_alias="index_name")
-    query_type: Literal['simple', 'vector'] = "simple"
-    content_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    vector_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    title_column: Optional[str] = Field(default=None, exclude=True)
-    url_column: Optional[str] = Field(default=None, exclude=True)
-    filename_column: Optional[str] = Field(default=None, exclude=True)
-    embedding_model_id: Optional[str] = Field(default=None, exclude=True)
-    
-    # Constructed fields
-    authentication: Optional[dict] = None
-    embedding_dependency: Optional[dict] = None
-    fields_mapping: Optional[dict] = None
-    
-    @field_validator('content_columns', 'vector_columns', mode="before")
-    @classmethod
-    def split_columns(cls, comma_separated_string: str) -> List[str]:
-        if isinstance(comma_separated_string, str) and len(comma_separated_string) > 0:
-            return parse_multi_columns(comma_separated_string)
-        
-        return None
-    
-    @model_validator(mode="after")
-    def set_authentication(self) -> Self:
-        self.authentication = {
-            "type": "encoded_api_key",
-            "encoded_api_key": self.encoded_api_key
-        }
-        
-        return self
-    
-    @model_validator(mode="after")
-    def set_fields_mapping(self) -> Self:
-        self.fields_mapping = {
-            "content_fields": self.content_columns,
-            "title_field": self.title_column,
-            "url_field": self.url_column,
-            "filepath_field": self.filename_column,
-            "vector_fields": self.vector_columns
-        }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        self.embedding_dependency = \
-            {"type": "model_id", "model_id": self.embedding_model_id} if self.embedding_model_id else \
-            self._settings.azure_openai.extract_embedding_dependency() 
-            
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-                
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }
-
-
-class _PineconeSettings(BaseSettings, DatasourcePayloadConstructor):
-    model_config = SettingsConfigDict(
-        env_prefix="PINECONE_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["pinecone"] = PrivateAttr(default="pinecone")
-    top_k: int = Field(default=5, serialization_alias="top_n_documents")
-    strictness: int = 3
-    enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
-    environment: str
-    api_key: str = Field(exclude=True)
-    index_name: str
-    query_type: Literal["vector"] = "vector"
-    content_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    vector_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    title_column: Optional[str] = Field(default=None, exclude=True)
-    url_column: Optional[str] = Field(default=None, exclude=True)
-    filename_column: Optional[str] = Field(default=None, exclude=True)
-    
-    # Constructed fields
-    authentication: Optional[dict] = None
-    embedding_dependency: Optional[dict] = None
-    fields_mapping: Optional[dict] = None
-    
-    @field_validator('content_columns', 'vector_columns', mode="before")
-    @classmethod
-    def split_columns(cls, comma_separated_string: str) -> List[str]:
-        if isinstance(comma_separated_string, str) and len(comma_separated_string) > 0:
-            return parse_multi_columns(comma_separated_string)
-        
-        return None
-    
-    @model_validator(mode="after")
-    def set_authentication(self) -> Self:
-        self.authentication = {
-            "type": "api_key",
-            "api_key": self.api_key
-        }
-        
-        return self
-    
-    @model_validator(mode="after")
-    def set_fields_mapping(self) -> Self:
-        self.fields_mapping = {
-            "content_fields": self.content_columns,
-            "title_field": self.title_column,
-            "url_field": self.url_column,
-            "filepath_field": self.filename_column,
-            "vector_fields": self.vector_columns
-        }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        self.embedding_dependency = \
-            self._settings.azure_openai.extract_embedding_dependency()
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-        
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }
-
-
-class _AzureMLIndexSettings(BaseSettings, DatasourcePayloadConstructor):
-    model_config = SettingsConfigDict(
-        env_prefix="AZURE_MLINDEX_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["azure_ml_index"] = PrivateAttr(default="azure_ml_index")
-    top_k: int = Field(default=5, serialization_alias="top_n_documents")
-    strictness: int = 3
-    enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
-    name: str
-    version: str
-    project_resource_id: str = Field(validation_alias="AZURE_ML_PROJECT_RESOURCE_ID")
-    content_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    vector_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    title_column: Optional[str] = Field(default=None, exclude=True)
-    url_column: Optional[str] = Field(default=None, exclude=True)
-    filename_column: Optional[str] = Field(default=None, exclude=True)
-    
-    # Constructed fields
-    fields_mapping: Optional[dict] = None
-    
-    @field_validator('content_columns', 'vector_columns', mode="before")
-    @classmethod
-    def split_columns(cls, comma_separated_string: str) -> List[str]:
-        if isinstance(comma_separated_string, str) and len(comma_separated_string) > 0:
-            return parse_multi_columns(comma_separated_string)
-        
-        return None
-    
-    @model_validator(mode="after")
-    def set_fields_mapping(self) -> Self:
-        self.fields_mapping = {
-            "content_fields": self.content_columns,
-            "title_field": self.title_column,
-            "url_field": self.url_column,
-            "filepath_field": self.filename_column,
-            "vector_fields": self.vector_columns
-        }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-        
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }
-
-
-class _AzureSqlServerSettings(BaseSettings, DatasourcePayloadConstructor):
-    model_config = SettingsConfigDict(
-        env_prefix="AZURE_SQL_SERVER_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["azure_sql_server"] = PrivateAttr(default="azure_sql_server")
-    
-    connection_string: Optional[str] = Field(default=None, exclude=True)
-    table_schema: Optional[str] = None
-    schema_max_row: Optional[int] = None
-    top_n_results: Optional[int] = None
-    database_server: Optional[str] = None
-    database_name: Optional[str] = None
-    port: Optional[int] = None
-    
-    # Constructed fields
-    authentication: Optional[dict] = None
-    
-    @model_validator(mode="after")
-    def construct_authentication(self) -> Self:
-        if self.connection_string:
-            self.authentication = {
-                "type": "connection_string",
-                "connection_string": self.connection_string
-            }
-        elif self.database_server and self.database_name and self.port:
-            self.authentication = {
-                "type": "system_assigned_managed_identity"
-            }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        #parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-        
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }
-    
-
-class _MongoDbSettings(BaseSettings, DatasourcePayloadConstructor):
-    model_config = SettingsConfigDict(
-        env_prefix="MONGODB_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["mongo_db"] = PrivateAttr(default="mongo_db")
-    
-    endpoint: str
-    username: str = Field(exclude=True)
-    password: str = Field(exclude=True)
-    database_name: str
-    collection_name: str
-    app_name: str
-    index_name: str
-    query_type: Literal["vector"] = "vector"
-    top_k: int = Field(default=5, serialization_alias="top_n_documents")
-    strictness: int = 3
-    enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
-    content_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    vector_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    title_column: Optional[str] = Field(default=None, exclude=True)
-    url_column: Optional[str] = Field(default=None, exclude=True)
-    filename_column: Optional[str] = Field(default=None, exclude=True)
-    
-    
-    # Constructed fields
-    authentication: Optional[dict] = None
-    embedding_dependency: Optional[dict] = None
-    fields_mapping: Optional[dict] = None
-    
-    @field_validator('content_columns', 'vector_columns', mode="before")
-    @classmethod
-    def split_columns(cls, comma_separated_string: str) -> List[str]:
-        if isinstance(comma_separated_string, str) and len(comma_separated_string) > 0:
-            return parse_multi_columns(comma_separated_string)
-        
-        return None
-    
-    @model_validator(mode="after")
-    def set_fields_mapping(self) -> Self:
-        self.fields_mapping = {
-            "content_fields": self.content_columns,
-            "title_field": self.title_column,
-            "url_field": self.url_column,
-            "filepath_field": self.filename_column,
-            "vector_fields": self.vector_columns
-        }
-        return self
-    
-    @model_validator(mode="after")
-    def construct_authentication(self) -> Self:
-        self.authentication = {
-            "type": "username_and_password",
-            "username": self.username,
-            "password": self.password
-        }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        self.embedding_dependency = \
-            self._settings.azure_openai.extract_embedding_dependency()
-            
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-        
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }
-        
+        }        
         
 class _BaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -755,7 +419,6 @@ class _BaseSettings(BaseSettings):
     datasource_type: Optional[str] = None
     auth_enabled: bool = False
     sanitize_answer: bool = False
-    use_promptflow: bool = False
 
 
 class _AppSettings(BaseModel):
@@ -767,17 +430,6 @@ class _AppSettings(BaseModel):
     # Constructed properties
     chat_history: Optional[_ChatHistorySettings] = None
     datasource: Optional[DatasourcePayloadConstructor] = None
-    promptflow: Optional[_PromptflowSettings] = None
-
-    @model_validator(mode="after")
-    def set_promptflow_settings(self) -> Self:
-        try:
-            self.promptflow = _PromptflowSettings()
-            
-        except ValidationError:
-            self.promptflow = None
-            
-        return self
     
     @model_validator(mode="after")
     def set_chat_history_settings(self) -> Self:
@@ -799,26 +451,6 @@ class _AppSettings(BaseModel):
             elif self.base_settings.datasource_type == "AzureCosmosDB":
                 self.datasource = _AzureCosmosDbMongoVcoreSettings(settings=self, _env_file=DOTENV_PATH)
                 logging.debug("Using Azure CosmosDB Mongo vcore")
-            
-            elif self.base_settings.datasource_type == "Elasticsearch":
-                self.datasource = _ElasticsearchSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using Elasticsearch")
-            
-            elif self.base_settings.datasource_type == "Pinecone":
-                self.datasource = _PineconeSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using Pinecone")
-            
-            elif self.base_settings.datasource_type == "AzureMLIndex":
-                self.datasource = _AzureMLIndexSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using Azure ML Index")
-            
-            elif self.base_settings.datasource_type == "AzureSqlServer":
-                self.datasource = _AzureSqlServerSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using SQL Server")
-            
-            elif self.base_settings.datasource_type == "MongoDB":
-                self.datasource = _MongoDbSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using Mongo DB")
                 
             else:
                 self.datasource = None

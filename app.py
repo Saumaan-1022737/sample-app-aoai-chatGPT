@@ -43,7 +43,6 @@ from backend.utils import (
 from azure.storage.blob.aio import BlobServiceClient
 
 
-
 async def get_blob_service_client():
     credential = DefaultAzureCredential()
     account_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net"
@@ -96,7 +95,6 @@ async def file_edit():
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
     # auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = authenticated_user['user_name']
-    print("email_address:", email_address)
     session['email_address'] = email_address
 
   
@@ -105,7 +103,6 @@ async def file_edit():
         if 'container_name' in form:  
             container_name = form['container_name']  
             session['container_name'] = container_name
-            print("container_name", container_name)
         else:  
             files = await request.files  
             file = files.get("file")  
@@ -169,7 +166,6 @@ async def assets(path):
     return await send_from_directory("static/assets", path)
 
 
-# Debug settings
 DEBUG = os.environ.get("DEBUG", "false")
 if DEBUG.lower() == "true":
     logging.basicConfig(level=logging.DEBUG)
@@ -177,7 +173,6 @@ if DEBUG.lower() == "true":
 USER_AGENT = "GitHubSampleWebApp/AsyncAzureOpenAI/1.0.0"
 
 
-# Frontend Settings via Environment Variables
 frontend_settings = {
     "auth_enabled": app_settings.base_settings.auth_enabled,
     "feedback_enabled": (
@@ -343,9 +338,10 @@ def prepare_model_args(request_body, request_headers):
         "model": app_settings.azure_openai.model,
         "user": user_json
     }
+    rag_args = {}
 
     if app_settings.datasource:
-        model_args["extra_body"] = {
+        rag_args["extra_body"] = {
             "data_sources": [
                 app_settings.datasource.construct_payload_configuration(
                     request=request
@@ -353,77 +349,7 @@ def prepare_model_args(request_body, request_headers):
             ]
         }
 
-    model_args_clean = copy.deepcopy(model_args)
-    if model_args_clean.get("extra_body"):
-        secret_params = [
-            "key",
-            "connection_string",
-            "embedding_key",
-            "encoded_api_key",
-            "api_key",
-        ]
-        for secret_param in secret_params:
-            if model_args_clean["extra_body"]["data_sources"][0]["parameters"].get(
-                secret_param
-            ):
-                model_args_clean["extra_body"]["data_sources"][0]["parameters"][
-                    secret_param
-                ] = "*****"
-        authentication = model_args_clean["extra_body"]["data_sources"][0][
-            "parameters"
-        ].get("authentication", {})
-        for field in authentication:
-            if field in secret_params:
-                model_args_clean["extra_body"]["data_sources"][0]["parameters"][
-                    "authentication"
-                ][field] = "*****"
-        embeddingDependency = model_args_clean["extra_body"]["data_sources"][0][
-            "parameters"
-        ].get("embedding_dependency", {})
-        if "authentication" in embeddingDependency:
-            for field in embeddingDependency["authentication"]:
-                if field in secret_params:
-                    model_args_clean["extra_body"]["data_sources"][0]["parameters"][
-                        "embedding_dependency"
-                    ]["authentication"][field] = "*****"
-
-    logging.debug(f"REQUEST BODY: {json.dumps(model_args_clean, indent=4)}")
-
-    return model_args
-
-
-async def promptflow_request(request):
-    try:
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {app_settings.promptflow.api_key}",
-        }
-        # Adding timeout for scenarios where response takes longer to come back
-        logging.debug(f"Setting timeout to {app_settings.promptflow.response_timeout}")
-        async with httpx.AsyncClient(
-            timeout=float(app_settings.promptflow.response_timeout)
-        ) as client:
-            pf_formatted_obj = convert_to_pf_format(
-                request,
-                app_settings.promptflow.request_field_name,
-                app_settings.promptflow.response_field_name
-            )
-            # NOTE: This only support question and chat_history parameters
-            # If you need to add more parameters, you need to modify the request body
-            response = await client.post(
-                app_settings.promptflow.endpoint,
-                json={
-                    app_settings.promptflow.request_field_name: pf_formatted_obj[-1]["inputs"][app_settings.promptflow.request_field_name],
-                    "chat_history": pf_formatted_obj[:-1],
-                },
-                headers=headers,
-            )
-        resp = response.json()
-        resp["id"] = request["messages"][-1]["id"]
-        return resp
-    except Exception as e:
-        logging.error(f"An error occurred while making promptflow_request: {e}")
-
+    return model_args, rag_args
 
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
@@ -433,8 +359,7 @@ async def send_chat_request(request_body, request_headers):
             filtered_messages.append(message)
             
     request_body['messages'] = filtered_messages
-    model_args = prepare_model_args(request_body, request_headers)
-
+    model_args, rag_args = prepare_model_args(request_body, request_headers)
     try:
         azure_openai_client = await init_openai_client()
         raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
@@ -446,23 +371,6 @@ async def send_chat_request(request_body, request_headers):
 
     return response, apim_request_id
 
-
-async def complete_chat_request(request_body, request_headers):
-    if app_settings.base_settings.use_promptflow:
-        response = await promptflow_request(request_body)
-        history_metadata = request_body.get("history_metadata", {})
-        return format_pf_non_streaming_response(
-            response,
-            history_metadata,
-            app_settings.promptflow.response_field_name,
-            app_settings.promptflow.citations_field_name
-        )
-    else:
-        response, apim_request_id = await send_chat_request(request_body, request_headers)
-        history_metadata = request_body.get("history_metadata", {})
-        return format_non_streaming_response(response, history_metadata, apim_request_id)
-
-
 async def stream_chat_request(request_body, request_headers):
     response, apim_request_id = await send_chat_request(request_body, request_headers)
     history_metadata = request_body.get("history_metadata", {})
@@ -470,22 +378,16 @@ async def stream_chat_request(request_body, request_headers):
     async def generate():
         async for completionChunk in response:
             yield format_stream_response(completionChunk, history_metadata, apim_request_id)
-
     return generate()
 
 
 async def conversation_internal(request_body, request_headers):
     try:
-        if app_settings.azure_openai.stream and not app_settings.base_settings.use_promptflow:
-            result = await stream_chat_request(request_body, request_headers)
-            response = await make_response(format_as_ndjson(result))
-            response.timeout = None
-            response.mimetype = "application/json-lines"
-            return response
-        else:
-            result = await complete_chat_request(request_body, request_headers)
-            return jsonify(result)
-
+        result = await stream_chat_request(request_body, request_headers)
+        response = await make_response(format_as_ndjson(result))
+        response.timeout = None
+        response.mimetype = "application/json-lines"
+        return response
     except Exception as ex:
         logging.exception(ex)
         if hasattr(ex, "status_code"):
@@ -500,7 +402,8 @@ async def conversation():
         return jsonify({"error": "request must be json"}), 415
     request_json = await request.get_json()
 
-    return await conversation_internal(request_json, request.headers)
+    result = await conversation_internal(request_json, request.headers)
+    return result
 
 
 @bp.route("/frontend_settings", methods=["GET"])
