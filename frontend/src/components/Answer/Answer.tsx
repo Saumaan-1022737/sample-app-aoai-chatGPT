@@ -2,7 +2,7 @@ import { FormEvent, useContext, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { nord } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Checkbox, DefaultButton, Dialog, FontIcon, Stack, Text } from '@fluentui/react'
+import { Checkbox, DefaultButton, Dialog, FontIcon, Stack, Text, Link } from '@fluentui/react'
 import { useBoolean } from '@fluentui/react-hooks'
 import { ThumbDislike20Filled, ThumbLike20Filled } from '@fluentui/react-icons'
 import DOMPurify from 'dompurify'
@@ -22,6 +22,11 @@ interface Props {
   onExectResultClicked: (answerId: string) => void
 }
 
+interface Mapping {
+  FileName: string;
+  URL:string
+}
+
 export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Props) => {
   const initializeAnswerFeedback = (answer: AskResponse) => {
     if (answer.message_id == undefined) return undefined
@@ -30,6 +35,26 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     if (Object.values(Feedback).includes(answer.feedback)) return answer.feedback
     return Feedback.Neutral
   }
+  const [contentMapping, setContentMapping] = useState<Mapping[]>([])
+  async function getData() {
+    const url = "/api/content-mapping";
+    try {
+      const response = await fetch(url); 
+      if (!response.ok) {
+        throw new Error(`Response status: ${response.status}`);
+      }
+      const json = await response.json();
+      setContentMapping(json)
+      // console.log("Testing new log",json);
+    }
+    catch (error:any) { console.error(error.message); }
+  }
+
+  useEffect(() => {
+    getData();
+  }, []);
+  
+
 
   const [isRefAccordionOpen, { toggle: toggleIsRefAccordionOpen }] = useBoolean(false)
   const filePathTruncationLimit = 50
@@ -45,10 +70,10 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     appStateContext?.state.frontendSettings?.feedback_enabled && appStateContext?.state.isCosmosDBAvailable?.cosmosDB
   const SANITIZE_ANSWER = appStateContext?.state.frontendSettings?.sanitize_answer
 
-  useEffect(() => {
-    // console.log('Content Mapping in Answer component:', sessionStorage.getItem("content_mapping"));
-    console.log('Content Mapping in Answer component:')
-  }, []);
+  // useEffect(() => {
+  //   // console.log('Content Mapping in Answer component:', sessionStorage.getItem("content_mapping"));
+  //   // console.log('Content Mapping in Answer component:')
+  // }, []);
 
   const handleChevronClick = () => {
     setChevronIsExpanded(!chevronIsExpanded)
@@ -154,6 +179,12 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     setIsFeedbackDialogOpen(false)
     setShowReportInappropriateFeedback(false)
     setNegativeFeedbackList([])
+  }
+
+  const findMapingByFileName = (fileName: string) => {
+    // Search the array for an object with the matching FileName
+    const result = contentMapping?.find(item => item.FileName === fileName);
+    return result || null; // Return the object if found, otherwise return null
   }
 
   const UnhelpfulFeedbackContent = () => {
@@ -357,22 +388,39 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
         </Stack>
         {chevronIsExpanded && (
           <div className={styles.citationWrapper}>
-            {parsedAnswer?.citations.map((citation, idx) => {
-              return (
-                <span
-                  title={createCitationFilepath(citation, ++idx)}
+            {contentMapping.length > 0 ? (
+              contentMapping.map((mapping, idx) => (
+                <Link 
+                  title={mapping.FileName}
                   tabIndex={0}
                   role="link"
                   key={idx}
-                  onClick={() => onCitationClicked(citation)}
-                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null)}
                   className={styles.citationContainer}
-                  aria-label={createCitationFilepath(citation, idx)}>
-                  <div className={styles.citation}>{idx}</div>
-                  {createCitationFilepath(citation, idx, true)}
-                </span>
-              )
-            })}
+                  aria-label={mapping.FileName}
+                  href={mapping.URL}
+                  target="_blank">
+                  {mapping.FileName}
+                </Link>
+              ))
+            ) : (
+              parsedAnswer?.citations.map((citation, idx) => {
+                return (
+                  <span
+                    title={createCitationFilepath(citation, ++idx)}
+                    tabIndex={0}
+                    role="link"
+                    key={idx}
+                    onClick={() => onCitationClicked(citation)}
+                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null)}
+                    className={styles.citationContainer}
+                    aria-label={createCitationFilepath(citation, idx)}>
+                    <div className={styles.citation}>{idx}</div>
+                    {createCitationFilepath(citation, idx, true)}
+                  </span>
+                )
+              })
+            )}
+
           </div>
         )}
       </Stack>

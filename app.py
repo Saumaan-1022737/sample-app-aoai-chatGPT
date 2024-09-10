@@ -33,6 +33,7 @@ from backend.settings import (
     app_settings,
     MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
 )
+from backend.rag_call import AzureSearchService
 from backend.utils import (
     format_as_ndjson,
     format_stream_response,
@@ -41,6 +42,7 @@ from backend.utils import (
     format_pf_non_streaming_response,
 )
 from azure.storage.blob.aio import BlobServiceClient
+
 
 
 
@@ -292,15 +294,22 @@ async def init_cosmosdb_client():
 
     return cosmos_conversation_client
 
-
-def prepare_model_args(request_body, request_headers):
+def prepare_model_args(request_body, request_headers, answer=None):
     request_messages = request_body.get("messages", [])
+    if request_messages[-1]['role'] == 'user' and answer is not None:
+        request_messages[-1]['content'] = f"""**query:** \n {request_messages[-1]['content']} \n\n\n **Answer from RAG:**\n {answer}"""
     messages = []
     if not app_settings.datasource:
         messages = [
             {
                 "role": "system",
-                "content": app_settings.azure_openai.system_message
+                "content": """
+**Instruction for generating and formatting the response**
+1. Provide a complete step by step response for the user query
+2. If user query contains **Answer from RAG** then use that answer, do not use any other source or prior knowlegde
+3. If query is a chit-chat query then reply it
+4. if  If user query does not contains **Answer from RAG** then just reply stating, 'There is no answer available'
+                """
             }
         ]
 
@@ -352,25 +361,30 @@ def prepare_model_args(request_body, request_headers):
 
     model_args['extra_body'] = rag_args['extra_body']
 
-    return model_args, rag_args
+    return model_args , rag_args
 
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
     messages = request_body.get("messages", [])
+    azure_search_service = AzureSearchService()
+    fields_mapping, answer = await azure_search_service.process_query(messages[-1]['content'])
+    content_mapping = []
+    if fields_mapping != [[]]:
+        for i in fields_mapping:
+            content_mapping.append({"URL": i['url_field'], "FileName": i['title_field']})
+
+    print("\ncontent_mapping\n", content_mapping)
+    session['content_mapping'] = content_mapping 
+    
     for message in messages:
         if message.get("role") != 'tool':
             filtered_messages.append(message)
             
     request_body['messages'] = filtered_messages
-    model_args, rag_args = prepare_model_args(request_body, request_headers)
-    print("model_args data source2\n", model_args)
-    print("\n\n\nrag_args data source2\n", rag_args)
+    model_args, rag_args = prepare_model_args(request_body, request_headers, answer)
 
     try:
         azure_openai_client = await init_openai_client()
-        content_mapping  = [{"URL": "https://microsoft.sharepoint.com/teams/collearninganddevelopmentlnd/mp",
-                             "FileName": "PDMLink101.pdf"}]
-        session['content_mapping '] = content_mapping 
         raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
         response = raw_response.parse()
         apim_request_id = raw_response.headers.get("apim-request-id") 
@@ -423,7 +437,6 @@ async def conversation():
 @bp.route("/frontend_settings", methods=["GET"])
 def get_frontend_settings():
     try:
-        print("frontend_settings", frontend_settings)
         return jsonify(frontend_settings), 200
     except Exception as e:
         logging.exception("Exception in /frontend_settings")

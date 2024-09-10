@@ -46,7 +46,7 @@ const enum messageStatus {
 }
 
 const Chat = () => {
-  console.log('testing random')
+  // console.log('testing random')
   const appStateContext = useContext(AppStateContext)
   const ui = appStateContext?.state.frontendSettings?.ui
   const AUTH_ENABLED = appStateContext?.state.frontendSettings?.auth_enabled
@@ -67,10 +67,9 @@ const Chat = () => {
   const [logo, setLogo] = useState('')
   const [answerId, setAnswerId] = useState<string>('')
 
-  useEffect(() => {
-    // console.log('Content Mapping in Chat component:', sessionStorage.getItem("content_mapping"));
-    console.log('Content Mapping in Chat component:')
-  }, []);
+  // useEffect(() => {
+  //   console.log('Content Mapping in Chat component:', sessionStorage.getItem("content_mapping"));
+  // }, []);
 
   const errorDialogContentProps = {
     type: DialogType.close,

@@ -329,9 +329,9 @@ class _AzureSearchSettings(BaseSettings, DatasourcePayloadConstructor):
         parameters = self.model_dump(exclude_none=True, by_alias=True)
         parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
         
-        print ("datasource:\n", {
-            "type": self._type,
-            "parameters": parameters})
+        # print ("datasource:\n", {
+        #     "type": self._type,
+        #     "parameters": parameters})
         return {
             "type": self._type,
             "parameters": parameters
