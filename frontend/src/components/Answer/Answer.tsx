@@ -45,6 +45,11 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     appStateContext?.state.frontendSettings?.feedback_enabled && appStateContext?.state.isCosmosDBAvailable?.cosmosDB
   const SANITIZE_ANSWER = appStateContext?.state.frontendSettings?.sanitize_answer
 
+  useEffect(() => {
+    // console.log('Content Mapping in Answer component:', sessionStorage.getItem("content_mapping"));
+    console.log('Content Mapping in Answer component:')
+  }, []);
+
   const handleChevronClick = () => {
     setChevronIsExpanded(!chevronIsExpanded)
     toggleIsRefAccordionOpen()

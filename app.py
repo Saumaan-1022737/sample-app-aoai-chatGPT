@@ -43,6 +43,7 @@ from backend.utils import (
 from azure.storage.blob.aio import BlobServiceClient
 
 
+
 async def get_blob_service_client():
     credential = DefaultAzureCredential()
     account_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net"
@@ -95,7 +96,6 @@ async def file_edit():
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
     # auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = authenticated_user['user_name']
-    print("email_address:", email_address)
     session['email_address'] = email_address
 
   
@@ -104,7 +104,6 @@ async def file_edit():
         if 'container_name' in form:  
             container_name = form['container_name']  
             session['container_name'] = container_name
-            print("container_name", container_name)
         else:  
             files = await request.files  
             file = files.get("file")  
@@ -343,7 +342,7 @@ def prepare_model_args(request_body, request_headers):
     rag_args = {}
 
     if app_settings.datasource:
-        model_args["extra_body"] = {
+        rag_args["extra_body"] = {
             "data_sources": [
                 app_settings.datasource.construct_payload_configuration(
                     request=request
@@ -351,7 +350,9 @@ def prepare_model_args(request_body, request_headers):
             ]
         }
 
-    return model_args
+    model_args['extra_body'] = rag_args['extra_body']
+
+    return model_args, rag_args
 
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
@@ -361,10 +362,15 @@ async def send_chat_request(request_body, request_headers):
             filtered_messages.append(message)
             
     request_body['messages'] = filtered_messages
-    model_args = prepare_model_args(request_body, request_headers)
+    model_args, rag_args = prepare_model_args(request_body, request_headers)
     print("model_args data source2\n", model_args)
+    print("\n\n\nrag_args data source2\n", rag_args)
+
     try:
         azure_openai_client = await init_openai_client()
+        content_mapping  = [{"URL": "https://microsoft.sharepoint.com/teams/collearninganddevelopmentlnd/mp",
+                             "FileName": "PDMLink101.pdf"}]
+        session['content_mapping '] = content_mapping 
         raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
         response = raw_response.parse()
         apim_request_id = raw_response.headers.get("apim-request-id") 
@@ -376,7 +382,6 @@ async def send_chat_request(request_body, request_headers):
 
 async def stream_chat_request(request_body, request_headers):
     response, apim_request_id = await send_chat_request(request_body, request_headers)
-    print("response_send_chat_request\n\n:", response)
     history_metadata = request_body.get("history_metadata", {})
     
     async def generate():
@@ -400,6 +405,11 @@ async def conversation_internal(request_body, request_headers):
             return jsonify({"error": str(ex)}), 500
 
 
+@bp.route('/api/content-mapping', methods=['GET'])
+async def get_content_mapping():
+    mapping = session.get('content_mapping', [])
+    return jsonify(mapping)
+
 @bp.route("/conversation", methods=["POST"])
 async def conversation():
     if not request.is_json:
@@ -413,6 +423,7 @@ async def conversation():
 @bp.route("/frontend_settings", methods=["GET"])
 def get_frontend_settings():
     try:
+        print("frontend_settings", frontend_settings)
         return jsonify(frontend_settings), 200
     except Exception as e:
         logging.exception("Exception in /frontend_settings")
