@@ -1,49 +1,18 @@
-import copy
 import json
-import base64
 import os
 import logging
 import uuid
-import httpx
 import asyncio
-from quart import (
-    Blueprint,
-    Quart,
-    jsonify,
-    make_response,
-    request,
-    send_from_directory,
-    render_template,
-    current_app,
-    redirect, 
-    url_for,
-    flash,
-    session,
-)
-
-from openai import AsyncAzureOpenAI
-from azure.identity.aio import (
-    DefaultAzureCredential,
-    get_bearer_token_provider
-)
+from quart import (Blueprint, Quart, jsonify, make_response, request, send_from_directory, flash, 
+                   render_template, current_app, redirect, session, url_for,)
+from azure.identity.aio import (DefaultAzureCredential)
 from backend.auth.auth_utils import get_authenticated_user_details
-from backend.security.ms_defender_utils import get_msdefender_user_json
 from backend.history.cosmosdbservice import CosmosConversationClient
-from backend.settings import (
-    app_settings,
-    MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
-)
-from backend.rag_call import AzureSearchService
-from backend.utils import (
-    format_as_ndjson,
-    format_stream_response,
-    format_non_streaming_response,
-    convert_to_pf_format,
-    format_pf_non_streaming_response,
-)
+from backend.utils import format_as_ndjson, format_stream_response
 from azure.storage.blob.aio import BlobServiceClient
-
-
+from backend.openai_client import init_openai_client
+from backend.settings import app_settings
+from backend.azure_rag import AzureSearchPromptService 
 
 
 async def get_blob_service_client():
@@ -99,34 +68,32 @@ async def file_edit():
     # auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = authenticated_user['user_name']
     session['email_address'] = email_address
-
+    session['container_name'] = os.getenv("AZURE_STORAGE_CONTAINER_NAME") 
+  
   
     if request.method == "POST":  
-        form = await request.form  
-        if 'container_name' in form:  
-            container_name = form['container_name']  
-            session['container_name'] = container_name
-        else:  
-            files = await request.files  
-            file = files.get("file")  
-            if file:  
-                blob_service_client, credential = await get_blob_service_client()  
-                try:  
-                    container_name = session.get('container_name')  
-                    if not container_name:  
-                        error_message = "Please provide a correct container name."  
-                    else:
-                        metadata={'url_metadata': form['url'], 
-                                  'file_name_metadata':form['file_name'],
-                                  'uploaded_by': email_address}
+        form = await request.form       
+        files = await request.files  
+        file = files.get("file")  
+        if file:  
+            blob_service_client, credential = await get_blob_service_client()  
+            try:  
+                container_name = session.get('container_name')  
+                if not container_name:  
+                    error_message = "Please provide a correct container name."  
+                else:
+                    metadata={'url_metadata': form['url'], 
+                                'file_name_metadata':form['file_name'],
+                                'type': form['type'],
+                                'uploaded_by': email_address}
 
-                        blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
-                        await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
-                except Exception as e:  
-                    error_message = f"Error: {str(e)}"  
-                finally:  
-                    await blob_service_client.close()  
-                    await credential.close()  
+                    blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
+                    await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
+            except Exception as e:  
+                error_message = f"Error: {str(e)}"  
+            finally:  
+                await blob_service_client.close()  
+                await credential.close()  
   
     container_name = session.get('container_name')  
     if not container_name:  
@@ -173,8 +140,6 @@ DEBUG = os.environ.get("DEBUG", "false")
 if DEBUG.lower() == "true":
     logging.basicConfig(level=logging.DEBUG)
 
-USER_AGENT = "GitHubSampleWebApp/AsyncAzureOpenAI/1.0.0"
-
 
 frontend_settings = {
     "auth_enabled": app_settings.base_settings.auth_enabled,
@@ -198,69 +163,6 @@ frontend_settings = {
 
 # Enable Microsoft Defender for Cloud Integration
 MS_DEFENDER_ENABLED = os.environ.get("MS_DEFENDER_ENABLED", "true").lower() == "true"
-
-
-# Initialize Azure OpenAI Client
-async def init_openai_client():
-    azure_openai_client = None
-    
-    try:
-        # API version check
-        if (
-            app_settings.azure_openai.preview_api_version
-            < MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
-        ):
-            raise ValueError(
-                f"The minimum supported Azure OpenAI preview API version is '{MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION}'"
-            )
-
-        # Endpoint
-        if (
-            not app_settings.azure_openai.endpoint and
-            not app_settings.azure_openai.resource
-        ):
-            raise ValueError(
-                "AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_RESOURCE is required"
-            )
-
-        endpoint = (
-            app_settings.azure_openai.endpoint
-            if app_settings.azure_openai.endpoint
-            else f"https://{app_settings.azure_openai.resource}.openai.azure.com/"
-        )
-
-        # Authentication
-        aoai_api_key = app_settings.azure_openai.key
-        ad_token_provider = None
-        if not aoai_api_key:
-            logging.debug("No AZURE_OPENAI_KEY found, using Azure Entra ID auth")
-            async with DefaultAzureCredential() as credential:
-                ad_token_provider = get_bearer_token_provider(
-                    credential,
-                    "https://cognitiveservices.azure.com/.default"
-                )
-
-        # Deployment
-        deployment = app_settings.azure_openai.model
-        if not deployment:
-            raise ValueError("AZURE_OPENAI_MODEL is required")
-
-        # Default Headers
-        default_headers = {"x-ms-useragent": USER_AGENT}
-
-        azure_openai_client = AsyncAzureOpenAI(
-            api_version=app_settings.azure_openai.preview_api_version,
-            api_key=aoai_api_key,
-            azure_ad_token_provider=ad_token_provider,
-            default_headers=default_headers,
-            azure_endpoint=endpoint,
-        )
-
-        return azure_openai_client
-    except Exception as e:
-        logging.exception("Exception in Azure OpenAI initialization", e)
-        azure_openai_client = None
-        raise e
 
 
 async def init_cosmosdb_client():
@@ -294,22 +196,29 @@ async def init_cosmosdb_client():
 
     return cosmos_conversation_client
 
-def prepare_model_args(request_body, request_headers, answer=None):
+async def prepare_model_args(request_body, request_headers):
     request_messages = request_body.get("messages", [])
+    query = request_messages[-1]['content']
+    azure_search_service = AzureSearchPromptService()
+    answer = None
+    actual_citations, answer, apim_request_id, user_json = await azure_search_service.rag(
+                                                            query = query, 
+                                                            top=3,
+                                                            request_body=request_body,
+                                                            request_headers=request_headers)
     if request_messages[-1]['role'] == 'user' and answer is not None:
-        request_messages[-1]['content'] = f"""**query:** \n {request_messages[-1]['content']} \n\n\n **Answer from RAG:**\n {answer}"""
+        request_messages[-1]['content'] = f"""**query:** \n {query} \n\n\n **Answer from RAG:**\n {answer}"""
     messages = []
     if not app_settings.datasource:
         messages = [
             {
                 "role": "system",
                 "content": """
-**Instruction for generating and formatting the response**
-1. Provide a complete step by step response for the user query
-2. If user query contains **Answer from RAG** then use that answer, do not use any other source or prior knowlegde
-3. If query is a chit-chat query then reply it
-4. if  If user query does not contains **Answer from RAG** then just reply stating, 'There is no answer available'
-                """
+**Instruction for Generating and Formatting the Response** 
+1. Provide a detailed, step-by-step response to the user's query.  
+2. If the query includes **Answer from RAG**, use only that answer without referencing other sources or prior knowledge.  
+3. Respond to chit-chat queries appropriately.  
+4. If the query is based on previous conversation, address it accordingly."""
             }
         ]
 
@@ -331,63 +240,36 @@ def prepare_model_args(request_body, request_headers, answer=None):
                         "content": message["content"]
                     }
                 )
-
-    user_json = None
-    if (MS_DEFENDER_ENABLED):
-        authenticated_user_details = get_authenticated_user_details(request_headers)
-        conversation_id = request_body.get("conversation_id", None)        
-        user_json = get_msdefender_user_json(authenticated_user_details, request_headers, conversation_id)
-
     model_args = {
         "messages": messages,
-        "temperature": app_settings.azure_openai.temperature,
-        "max_tokens": app_settings.azure_openai.max_tokens,
+        "temperature": 0.2,
+        "max_tokens": 8000,
         "top_p": app_settings.azure_openai.top_p,
         "stop": app_settings.azure_openai.stop_sequence,
         "stream": app_settings.azure_openai.stream,
         "model": app_settings.azure_openai.model,
         "user": user_json
     }
-    rag_args = {}
 
-    if app_settings.datasource:
-        rag_args["extra_body"] = {
-            "data_sources": [
-                app_settings.datasource.construct_payload_configuration(
-                    request=request
-                )
-            ]
-        }
+    # model_args['extra_body'] = rag_args['extra_body']
 
-    model_args['extra_body'] = rag_args['extra_body']
-
-    return model_args , rag_args
+    return model_args, actual_citations, apim_request_id
 
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
     messages = request_body.get("messages", [])
-    azure_search_service = AzureSearchService()
-    fields_mapping, answer = await azure_search_service.process_query(messages[-1]['content'])
-    content_mapping = []
-    if fields_mapping != [[]]:
-        for i in fields_mapping:
-            content_mapping.append({"URL": i['url_field'], "FileName": i['title_field']})
-
-    print("\ncontent_mapping\n", content_mapping)
-    session['content_mapping'] = content_mapping 
-    
     for message in messages:
         if message.get("role") != 'tool':
             filtered_messages.append(message)
             
     request_body['messages'] = filtered_messages
-    model_args, rag_args = prepare_model_args(request_body, request_headers, answer)
-
+    model_args, actual_citations, apim_request_id = await prepare_model_args(request_body, request_headers)
+    session['content_mapping'] = actual_citations
     try:
         azure_openai_client = await init_openai_client()
         raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
         response = raw_response.parse()
-        apim_request_id = raw_response.headers.get("apim-request-id") 
+        # apim_request_id = raw_response.headers.get("apim-request-id") 
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e

@@ -1,91 +1,97 @@
-<!DOCTYPE html>  
-<html lang="en">  
-<head>  
-    <meta charset="UTF-8">  
-    <title>File Edit</title>  
-    <style>  
-        .alert {  
-            padding: 15px;  
-            margin-bottom: 20px;  
-            border: 1px solid transparent;  
-            border-radius: 4px;  
-        }  
-        .alert-danger {  
-            color: #a94442;  
-            background-color: #f2dede;  
-            border-color: #ebccd1;  
-        }  
-        .disabled {  
-            pointer-events: none;  
-            opacity: 0.5;  
-        } 
-        .form-group {
-            margin-bottom: 15px;
-            text-align: center;
-        }
-        .form-group label {
-            display: inline-block;
-            width: 100px;
-            text-align: right;
-        }
-        .form-group input {
-            display: inline-block;
-            width: 200px;
-            text-align: left;
-        } 
-    </style>  
-    <script>  
-        function checkFormFields() {  
-            var fileInput = document.getElementById("file");
-            var fileNameInput = document.getElementById("file_name");  
-            var urlInput = document.getElementById("url");  
-            var uploadButton = document.getElementById("upload_button");  
-            
-            if (fileInput.value && fileNameInput.value && urlInput.value) {  
-                uploadButton.classList.remove("disabled");  
-            } else {  
-                uploadButton.classList.add("disabled");  
-            }  
-        }
-    </script>  
-</head>  
-<body> 
-    <div class="form-group">
-        <label for="email_address">Email Address:</label>  
-        <input type="text" id="email_address" name="email_address" value="{{ session.get('email_address', '') }}" readonly>  
-    </div> 
-    <h1>File Edit</h1>  
-    <form action="/file_edit" method="post">  
-        <label for="container_name">Container Name:</label>  
-        <input type="text" id="container_name" name="container_name" value="{{ session.get('container_name', '') }}">  
-        <button type="submit">Set Container</button>  
-    </form>  
-    <form action="/file_edit" method="post" enctype="multipart/form-data">  
-        <input type="file" id="file" name="file" onchange="checkFormFields()">  
-        <br><br>  
-        <label for="file_name">File Name:</label>  
-        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()" value="{{ session.get('file_name', '') }}">  
-        <br><br>  
-        <label for="url">URL:</label>  
-        <input type="text" id="url" name="url" oninput="checkFormFields()" value="{{ session.get('url', '') }}">  
-        <br><br>  
-        <button type="submit" id="upload_button" class="disabled">Upload</button>  
-    </form>  
-    <h2>Existing Files</h2>  
-    <ul>  
-        {% for blob in blobs %}  
-            <li>  
-                {{ blob.name }}  
-                <form action="/delete_file/{{ blob.name }}" method="post" style="display:inline;">  
-                    <button type="submit">Delete</button>  
-                </form>  
-            </li>  
-        {% endfor %}  
-    </ul>  
-    {% if error_message %}  
-        <div class="alert alert-danger">  
-            {{ error_message }}  
-        </div>  
-    {% endif %}  
-</body>  
-</html>
+<!DOCTYPE html>    
+<html lang="en">    
+<head>        
+    <meta charset="UTF-8">        
+    <title>File Edit</title>        
+    <style>            
+        .alert {                
+            padding: 15px;                
+            margin-bottom: 20px;                
+            border: 1px solid transparent;                
+            border-radius: 4px;            
+        }            
+        .alert-danger {                
+            color: #a94442;                
+            background-color: #f2dede;                
+            border-color: #ebccd1;            
+        }            
+        .disabled {                
+            pointer-events: none;                
+            opacity: 0.5;            
+        }           
+        .form-group {              
+            margin-bottom: 15px;              
+            text-align: center;          
+        }          
+        .form-group label {              
+            display: inline-block;              
+            width: 100px;              
+            text-align: right;          
+        }          
+        .form-group input {              
+            display: inline-block;              
+            width: 200px;              
+            text-align: left;          
+        }       
+    </style>        
+    <script>            
+        function checkFormFields() {                
+            var fileInput = document.getElementById("file");  
+            var fileNameInput = document.getElementById("file_name");                
+            var urlInput = document.getElementById("url");                
+            var typeSelect = document.getElementById("type");  
+            var uploadButton = document.getElementById("upload_button");                            
+              
+            if (fileInput.value && fileNameInput.value && urlInput.value && typeSelect.value) {                    
+                uploadButton.classList.remove("disabled");                
+            } else {                    
+                uploadButton.classList.add("disabled");                
+            }            
+        }      
+    </script>    
+</head>    
+<body>       
+    <div class="form-group">          
+        <label for="email_address">Email Address:</label>            
+        <input type="text" id="email_address" name="email_address" value="{{ session.get('email_address', '') }}" readonly>        
+    </div>       
+    <h1>File Edit</h1>
+        <label for="container_name">Container:</label>               
+        <input type="text" id="container_name" name="container_name" value="{{ session.get('container_name', '') }}" readonly>             
+    </form>
+    <form action="/file_edit" method="post" enctype="multipart/form-data">            
+        <input type="file" id="file" name="file" onchange="checkFormFields()">            
+        <br><br>            
+        <label for="file_name">File Name:</label>            
+        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()" value="{{ session.get('file_name', '') }}">            
+        <br><br>            
+        <label for="url">URL:</label>            
+        <input type="text" id="url" name="url" oninput="checkFormFields()" value="{{ session.get('url', '') }}">            
+        <br><br>            
+        <label for="type">Type:</label>            
+        <select id="type" name="type" onchange="checkFormFields()">                
+            <option value="">Select Type</option>                
+            <option value="video">video</option>                
+            <option value="text">wiki</option>            
+        </select>            
+        <br><br>            
+        <button type="submit" id="upload_button" class="disabled">Upload</button>        
+    </form>        
+    <h2>Existing Files</h2>        
+    <ul>            
+        {% for blob in blobs %}                
+            <li>                    
+                {{ blob.name }}                    
+                <form action="/delete_file/{{ blob.name }}" method="post" style="display:inline;">                        
+                    <button type="submit">Delete</button>                    
+                </form>                
+            </li>            
+        {% endfor %}        
+    </ul>        
+    {% if error_message %}            
+        <div class="alert alert-danger">                
+            {{ error_message }}            
+        </div>        
+    {% endif %}    
+</body>    
+</html>  

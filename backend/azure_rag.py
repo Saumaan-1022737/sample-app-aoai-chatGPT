@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os  
 from backend.openai_client import init_openai_client  
 from azure.identity.aio import DefaultAzureCredential  
@@ -15,15 +14,13 @@ import base64
 import re 
 
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-  
-load_dotenv()
+
 
 class AnswerCitation(BaseModel):
     """ 
     Citations and Answer
     """ 
-    citation: List[List[str]] = Field(
-        description="Alwaysm include all the citations. in case of no answer citation=[[]] ")
+    citation: List[List[str]] = Field(description="Always include all the citations. in case of no answer citation=[[]] ")
     
     answer: str = Field(description="Only include Answer, do not include any citations in this. In case of no answer, answer = 'There is no answer available'") 
   
@@ -32,7 +29,6 @@ class AzureSearchPromptService:
         self.service_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")  
         self.wiki_index = os.getenv("AZURE_SEARCH_INDEX_VIDEO")  #AZURE_SEARCH_INDEX_VIDEO
         self.embedding_model = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME")  
-        self.search_client = SearchClient(self.service_endpoint, self.wiki_index, DefaultAzureCredential())
         self.chat_model = os.environ.get("AZURE_OPENAI_MODEL")
         self.MS_DEFENDER_ENABLED = os.environ.get("MS_DEFENDER_ENABLED", "true").lower() == "true"
   
@@ -47,9 +43,10 @@ class AzureSearchPromptService:
         return VectorizedQuery(vector=vector, k_nearest_neighbors=3, fields="text_vector")  
   
     async def search(self, query: str, top: int = 3) -> List[Any]:  
-        vector_query = await self.generate_vector_query(query)  
-        async with self.search_client:  
-            contexts = await self.search_client.search(  
+        
+        async with SearchClient(self.service_endpoint, self.wiki_index, DefaultAzureCredential()) as search_client:
+            vector_query = await self.generate_vector_query(query)  
+            contexts = await search_client.search(  
                 search_text=query,  
                 vector_queries=[vector_query],  
                 select=["title", "chunk", "url_metadata"],  #todo
@@ -290,7 +287,7 @@ INSTRUCTIONS:
                 title = contexts[index]['title'].split('.')[0]
                 type = 'video' #contexts[index]['type'] #todo
                 if type == 'video' and start_time is not None:
-                    title = f"{title} @ **[{self.convert_seconds_to_hhmmss(start_time)}]**"
+                    title = f"{title} @ [{self.convert_seconds_to_hhmmss(start_time)}]"
                     if self.is_video_link(url_metadata):  
                         timestamp_link = url_metadata + f"#t={start_time}"
                     else:  
@@ -306,7 +303,7 @@ INSTRUCTIONS:
                     "start_time": start_time
                 })
             actual_citations = self.filter_actual_citations(actual_citations)
-
+            actual_citations = [{k: d[k] for k in ('FileName', 'URL')} for d in actual_citations]
         return actual_citations
 
 

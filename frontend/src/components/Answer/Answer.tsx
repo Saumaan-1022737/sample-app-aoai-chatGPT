@@ -38,6 +38,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   const [contentMapping, setContentMapping] = useState<Mapping[]>([])
   async function getData() {
     const url = "/api/content-mapping";
+    
     try {
       const response = await fetch(url); 
       if (!response.ok) {
@@ -45,7 +46,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       }
       const json = await response.json();
       setContentMapping(json)
-      // console.log("Testing new log",json);
+      console.log("Testing new log",json);
     }
     catch (error:any) { console.error(error.message); }
   }
@@ -181,12 +182,6 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     setNegativeFeedbackList([])
   }
 
-  const findMapingByFileName = (fileName: string) => {
-    // Search the array for an object with the matching FileName
-    const result = contentMapping?.find(item => item.FileName === fileName);
-    return result || null; // Return the object if found, otherwise return null
-  }
-
   const UnhelpfulFeedbackContent = () => {
     return (
       <>
@@ -277,6 +272,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       )
     }
   }
+  console.log('contentMapping', contentMapping)
   return (
     <>
       <Stack className={styles.answerContainer} tabIndex={0}>
@@ -334,31 +330,29 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
           </Stack>
         )}
         <Stack horizontal className={styles.answerFooter}>
-          {!!parsedAnswer?.citations.length && (
-            <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>
-              <Stack style={{ width: '100%' }}>
-                <Stack horizontal horizontalAlign="start" verticalAlign="center">
-                  <Text
-                    className={styles.accordionTitle}
-                    onClick={toggleIsRefAccordionOpen}
-                    aria-label="Open references"
-                    tabIndex={0}
-                    role="button">
-                    <span>
-                      {parsedAnswer.citations.length > 1
-                        ? parsedAnswer.citations.length + ' references'
-                        : '1 reference'}
-                    </span>
-                  </Text>
-                  <FontIcon
-                    className={styles.accordionIcon}
-                    onClick={handleChevronClick}
-                    iconName={chevronIsExpanded ? 'ChevronDown' : 'ChevronRight'}
-                  />
-                </Stack>
-              </Stack>
-            </Stack.Item>
-          )}
+        {contentMapping?.length > 0 && (  
+          <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>  
+            <Stack style={{ width: '100%' }}>  
+              <Stack horizontal horizontalAlign="start" verticalAlign="center">  
+                <Text  
+                  className={styles.accordionTitle}  
+                  onClick={toggleIsRefAccordionOpen}  
+                  aria-label="Open references"  
+                  tabIndex={0}  
+                  role="button"  
+                >  
+                  <span>  
+                    {contentMapping.length > 1 ? contentMapping.length + ' references' : '1 reference'}  
+                  </span>  
+                </Text>  
+                <FontIcon  
+                  className={styles.accordionIcon}  
+                  onClick={handleChevronClick}  
+                  iconName={chevronIsExpanded ? 'ChevronDown' : 'ChevronRight'}  
+                />  
+              </Stack>  
+            </Stack>  
+          </Stack.Item>)}  
           <Stack.Item className={styles.answerDisclaimerContainer}>
             <span className={styles.answerDisclaimer}>AI-generated content may be incorrect</span>
           </Stack.Item>
