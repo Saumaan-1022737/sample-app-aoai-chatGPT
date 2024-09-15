@@ -13,6 +13,8 @@ from azure.storage.blob.aio import BlobServiceClient
 from backend.openai_client import init_openai_client
 from backend.settings import app_settings
 from backend.azure_rag import AzureSearchPromptService 
+# from dotenv import load_dotenv
+# load_dotenv()
 
 
 async def get_blob_service_client():
@@ -21,6 +23,33 @@ async def get_blob_service_client():
     # Create BlobServiceClient using the credential
     blob_service_client = BlobServiceClient(account_url, credential=credential)
     return blob_service_client, credential
+
+
+async def list_blobs_with_metadata(blob_service_client, credential, container_name):   
+    container_client = blob_service_client.get_container_client(container_name)  
+      
+    blob_list = []  
+    async for blob in container_client.list_blobs():
+        metadata_ = {'name': None,
+                    'url':None,
+                    'uploaded_by': None,
+                    'type':None}
+        blob_client = container_client.get_blob_client(blob)  
+        blob_properties = await blob_client.get_blob_properties()  
+        blob_metadata = blob_properties.metadata
+        
+        metadata_['name'] = blob.name
+        metadata_['uploaded_at'] = blob.last_modified.strftime("%d/%m/%Y %H:%M:%S")
+        if 'url_metadata' in blob_metadata:
+            metadata_['url'] = blob_metadata['url_metadata']
+        if 'uploaded_by' in blob_metadata:
+            metadata_['uploaded_by'] = blob_metadata['uploaded_by']
+        if 'type' in blob_metadata:
+            metadata_['type'] = blob_metadata['type']
+            
+        blob_list.append(metadata_)  
+      
+    return blob_list 
 
 
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
@@ -69,49 +98,51 @@ async def file_edit():
     email_address = authenticated_user['user_name']
     session['email_address'] = email_address
     session['container_name'] = os.getenv("AZURE_STORAGE_CONTAINER_NAME") 
-  
-  
-    if request.method == "POST":  
-        form = await request.form       
-        files = await request.files  
-        file = files.get("file")  
-        if file:  
-            blob_service_client, credential = await get_blob_service_client()  
-            try:  
-                container_name = session.get('container_name')  
-                if not container_name:  
-                    error_message = "Please provide a correct container name."  
-                else:
-                    metadata={'url_metadata': form['url'], 
-                                'file_name_metadata':form['file_name'],
-                                'type': form['type'],
-                                'uploaded_by': email_address}
+    users = os.getenv("UPLOAD_USERS")
+    if email_address in  users:
+        if request.method == "POST":  
+            form = await request.form       
+            files = await request.files  
+            file = files.get("file")  
+            if file:  
+                blob_service_client, credential = await get_blob_service_client()  
+                try:  
+                    container_name = session.get('container_name')  
+                    if not container_name:  
+                        error_message = "Please provide a correct container name."  
+                    else:
+                        metadata={'url_metadata': form['url'], 
+                                    'file_name_metadata':form['file_name'],
+                                    'type': form['type'],
+                                    'uploaded_by': email_address}
 
-                    blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
-                    await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
-            except Exception as e:  
-                error_message = f"Error: {str(e)}"  
-            finally:  
-                await blob_service_client.close()  
-                await credential.close()  
-  
-    container_name = session.get('container_name')  
-    if not container_name:  
-        error_message = "Please provide a container name."  
-        return await render_template("file_edit.html", error_message=error_message, blobs=[])  
-  
-    blob_service_client, credential = await get_blob_service_client()  
-    try:  
-        container_client = blob_service_client.get_container_client(container_name)  
-        blob_list = [blob async for blob in container_client.list_blobs()]  
-    except Exception as e:  
-        error_message = f"Error: The specified container does not exist.\n\n{e}"  
-        blob_list = []  
-    finally:  
-        await blob_service_client.close()  
-        await credential.close()  
-  
-    return await render_template("file_edit.html", error_message=error_message, blobs=blob_list)  
+                        blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
+                        await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
+                except Exception as e:  
+                    error_message = f"Error: {str(e)}"  
+                finally:  
+                    await blob_service_client.close()  
+                    await credential.close()  
+
+        container_name = session.get('container_name')  
+        if not container_name:  
+            error_message = "Please provide a container name."  
+            return await render_template("file_edit.html", error_message=error_message, blobs=[])  
+    
+        blob_service_client, credential = await get_blob_service_client()  
+        try:  
+            blob_list = await list_blobs_with_metadata(blob_service_client, credential, container_name)
+
+        except Exception as e:  
+            error_message = f"Error: The specified container does not exist.\n\n{e}"  
+            blob_list = []  
+        finally:  
+            await blob_service_client.close()  
+            await credential.close()  
+    
+        return await render_template("file_edit.html", error_message=error_message, blobs=blob_list)
+    else:
+       return await render_template("un_auth.html", error_message="", blobs=[])   
   
 @bp.route("/delete_file/<blob_name>", methods=["POST"])  
 async def delete_file(blob_name):  

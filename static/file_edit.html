@@ -1,97 +1,278 @@
-<!DOCTYPE html>    
-<html lang="en">    
-<head>        
-    <meta charset="UTF-8">        
-    <title>File Edit</title>        
-    <style>            
-        .alert {                
-            padding: 15px;                
-            margin-bottom: 20px;                
-            border: 1px solid transparent;                
-            border-radius: 4px;            
-        }            
-        .alert-danger {                
-            color: #a94442;                
-            background-color: #f2dede;                
-            border-color: #ebccd1;            
-        }            
-        .disabled {                
-            pointer-events: none;                
-            opacity: 0.5;            
-        }           
-        .form-group {              
-            margin-bottom: 15px;              
-            text-align: center;          
-        }          
-        .form-group label {              
-            display: inline-block;              
-            width: 100px;              
-            text-align: right;          
-        }          
-        .form-group input {              
-            display: inline-block;              
-            width: 200px;              
-            text-align: left;          
-        }       
-    </style>        
-    <script>            
-        function checkFormFields() {                
-            var fileInput = document.getElementById("file");  
-            var fileNameInput = document.getElementById("file_name");                
-            var urlInput = document.getElementById("url");                
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <title>File Manager</title>  
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">  
+    <style>  
+        body {  
+            background-color: #f4f4f9;  
+            padding: 20px;  
+        }  
+        .form-container {  
+            max-width: 600px;  
+            margin: 0 auto;  
+            background-color: #fff;  
+            padding: 20px;  
+            border-radius: 8px;  
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);  
+        }  
+        .file-list {  
+        max-width: 800px;  
+        margin: 20px auto;  
+        }  
+        .table th, .table td {  
+            vertical-align: middle;  
+        }  
+        .table th {  
+            background-color: #007bff;  
+            color: white;  
+        }  
+        .table td {  
+            background-color: #f9f9f9;  
+        }  
+        .table td.small-font {  
+            font-size: 0.8em;  
+        } 
+        .custom-file-upload {  
+            display: inline-block;  
+            padding: 6px 12px;  
+            cursor: pointer;  
+            background-color: #007bff;  
+            color: white;  
+            border-radius: 4px;  
+            border: 1px solid #007bff;  
+            transition: background-color 0.3s, color 0.3s;  
+        }  
+        .custom-file-upload:hover {  
+            background-color: #0056b3;  
+            color: white;  
+        }  
+        #file {  
+            display: none;  
+        }
+        .btn-danger {  
+        background-color: #dc3545;  
+        border-color: #dc3545;  
+        }  
+        .btn-danger:hover {  
+            background-color: #c82333;  
+            border-color: #bd2130;  
+        } 
+    </style>  
+    <script> 
+        function checkFormFields() {  
+            var urlInput = document.getElementById("url");  
             var typeSelect = document.getElementById("type");  
-            var uploadButton = document.getElementById("upload_button");                            
-              
-            if (fileInput.value && fileNameInput.value && urlInput.value && typeSelect.value) {                    
-                uploadButton.classList.remove("disabled");                
-            } else {                    
-                uploadButton.classList.add("disabled");                
-            }            
-        }      
-    </script>    
-</head>    
-<body>       
-    <div class="form-group">          
-        <label for="email_address">Email Address:</label>            
-        <input type="text" id="email_address" name="email_address" value="{{ session.get('email_address', '') }}" readonly>        
-    </div>       
-    <h1>File Edit</h1>
-        <label for="container_name">Container:</label>               
-        <input type="text" id="container_name" name="container_name" value="{{ session.get('container_name', '') }}" readonly>             
-    </form>
-    <form action="/file_edit" method="post" enctype="multipart/form-data">            
-        <input type="file" id="file" name="file" onchange="checkFormFields()">            
-        <br><br>            
-        <label for="file_name">File Name:</label>            
-        <input type="text" id="file_name" name="file_name" oninput="checkFormFields()" value="{{ session.get('file_name', '') }}">            
-        <br><br>            
-        <label for="url">URL:</label>            
-        <input type="text" id="url" name="url" oninput="checkFormFields()" value="{{ session.get('url', '') }}">            
-        <br><br>            
-        <label for="type">Type:</label>            
-        <select id="type" name="type" onchange="checkFormFields()">                
-            <option value="">Select Type</option>                
-            <option value="video">video</option>                
-            <option value="text">wiki</option>            
-        </select>            
-        <br><br>            
-        <button type="submit" id="upload_button" class="disabled">Upload</button>        
-    </form>        
-    <h2>Existing Files</h2>        
-    <ul>            
-        {% for blob in blobs %}                
-            <li>                    
-                {{ blob.name }}                    
-                <form action="/delete_file/{{ blob.name }}" method="post" style="display:inline;">                        
-                    <button type="submit">Delete</button>                    
-                </form>                
-            </li>            
-        {% endfor %}        
-    </ul>        
-    {% if error_message %}            
-        <div class="alert alert-danger">                
-            {{ error_message }}            
-        </div>        
-    {% endif %}    
-</body>    
+            var uploadButton = document.getElementById("upload_button");  
+            var urlErrorMessage = document.getElementById("urlErrorMessage");  
+
+            var urlPattern = /^(ftp|http|https):\/\/[^ "]+$/;  
+            var isValidUrl = urlPattern.test(urlInput.value);  
+
+            if (isValidUrl) {  
+            urlErrorMessage.style.display = 'none';  
+            } else {  
+            urlErrorMessage.style.display = 'block';  
+            }  
+
+            if (isValidUrl && typeSelect.value) {  
+            uploadButton.classList.remove("disabled");  
+            uploadButton.disabled = false;  
+            } else {  
+            uploadButton.classList.add("disabled");  
+            uploadButton.disabled = true;  
+            }  
+        }  
+ 
+  
+  
+        function autoFillFileName() {  
+            var fileInput = document.getElementById("file");  
+            var fileNameInput = document.getElementById("file_name");  
+            var urlInput = document.getElementById("url");  
+            var typeSelect = document.getElementById("type");  
+  
+            var fileName = fileInput.value.split('\\').pop();  
+  
+            if (!fileName) {  
+                return;  
+            }  
+  
+            fileNameInput.value = fileName;  
+  
+            var allowedExtensions = /(\.csv|\.eml|\.epub|\.gz|\.html|\.json|\.kml|\.docx?|\.xlsx?|\.pptx?|\.msg|\.xml|\.odt|\.ods|\.odp|\.pdf|\.txt|\.rtf|\.zip)$/i;  
+            if (!allowedExtensions.exec(fileName)) {  
+                alert('File type not supported.');  
+                fileInput.value = '';  
+                fileNameInput.value = '';  
+                urlInput.disabled = true;  
+                typeSelect.disabled = true;  
+                return;  
+            }  
+  
+            urlInput.disabled = false;  
+            typeSelect.disabled = false;  
+            checkFormFields();  
+        }  
+        function showDeleteModal(fileName, fileType, uploader, fileURL) {  
+            document.getElementById('modalFileName').textContent = fileName;  
+            document.getElementById('modalFileType').textContent = fileType;  
+            document.getElementById('modalUploader').textContent = uploader;  
+            document.getElementById('modalFileURL').textContent = fileURL;  
+            document.getElementById('modalFileURL').href = fileURL;  
+            $('#deleteModal').modal('show');  
+
+            var confirmInput = document.getElementById('confirmFileName');  
+            var deleteButton = document.getElementById('confirmDeleteButton');  
+            var errorMessage = document.getElementById('errorMessage');  
+
+            confirmInput.value = '';  
+            deleteButton.disabled = true;  
+            errorMessage.style.display = 'none';  
+
+            confirmInput.oninput = function() {  
+            if (confirmInput.value === fileName) {  
+                deleteButton.disabled = false;  
+                errorMessage.style.display = 'none';  
+            } else {  
+                deleteButton.disabled = true;  
+                errorMessage.style.display = 'block';  
+            }  
+            };  
+
+            deleteButton.onclick = function() {  
+            $('#deleteModal').modal('hide');  
+            var form = document.createElement('form');  
+            form.method = 'post';  
+            form.action = '/delete_file/' + fileName;  
+            document.body.appendChild(form);  
+            form.submit();  
+            };  
+        }  
+   
+    </script>  
+</head>  
+<body>  
+    <h1 class="text-center">File Uploader</h1>  
+    <div class="form-container">  
+        <div class="form-group row">  
+            <label for="email_address" class="col-sm-3 col-form-label">Email Address:</label>  
+            <div class="col-sm-9">  
+                <input type="text" id="email_address" name="email_address" class="form-control" value="{{ session.get('email_address', '') }}" readonly>  
+            </div>  
+        </div>  
+        <div class="form-group row">  
+            <label for="container_name" class="col-sm-3 col-form-label">Container:</label>  
+            <div class="col-sm-9">  
+                <input type="text" id="container_name" name="container_name" class="form-control" value="{{ session.get('container_name', '') }}" readonly>  
+            </div>  
+        </div>  
+        <form action="/file_edit" method="post" enctype="multipart/form-data">  
+            <div class="form-group row">  
+                <label for="file" class="col-sm-3 col-form-label">Choose File:</label>  
+                <div class="col-sm-9">  
+                    <label class="custom-file-upload">  
+                        <input type="file" id="file" name="file" onchange="autoFillFileName()">  
+                        Choose File  
+                    </label>  
+                </div>  
+            </div>  
+            <div class="form-group row">  
+                <label for="file_name" class="col-sm-3 col-form-label">File Name:</label>  
+                <div class="col-sm-9">  
+                    <input type="text" id="file_name" name="file_name" class="form-control" readonly>  
+                </div>  
+            </div>  
+            <div class="form-group row">  
+                <label for="url" class="col-sm-3 col-form-label">URL:</label>  
+                <div class="col-sm-9">  
+                  <input type="text" id="url" name="url" class="form-control" oninput="checkFormFields()" disabled>  
+                  <small id="urlErrorMessage" class="text-danger" style="display: none;">Invalid URL format.</small>  
+                </div>  
+            </div>                 
+            <div class="form-group row">  
+                <label for="type" class="col-sm-3 col-form-label">Type:</label>  
+                <div class="col-sm-9">  
+                    <select id="type" name="type" class="form-control" onchange="checkFormFields()" disabled>  
+                        <option value="">Select Type</option>  
+                        <option value="video">video</option>  
+                        <option value="text">wiki</option>  
+                    </select>  
+                </div>  
+            </div>  
+            <div class="form-group text-center">  
+                <button type="submit" id="upload_button" class="btn btn-primary disabled" disabled>Upload</button>  
+            </div>  
+        </form>  
+    </div>  
+    <h2 class="text-center">{{ session.get('container_name', '') }}</h2>  
+    <div class="file-list">  
+        <table class="table table-striped">  
+            <thead>  
+                <tr>  
+                    <th>File Name</th>  
+                    <th>Type</th>  
+                    <th>Uploader</th>  
+                    <th>Uploaded at</th>  
+                    <th>Action</th>  
+                </tr>  
+            </thead>  
+            <tbody>  
+                {% for blob in blobs %}  
+                <tr>  
+                    <td>  
+                        <a href="{{ blob.url }}" target="_blank">{{ blob.name }}</a>  
+                    </td>  
+                    <td class="small-font">{{ blob.type }}</td>  
+                    <td class="small-font">{{ blob.uploaded_by}}</td>  
+                    <td class="small-font">{{ blob.uploaded_at}}</td>  
+                    <td>  
+                        <button type="button" class="btn btn-danger" onclick="showDeleteModal('{{ blob.name }}', '{{blob.type }}', '{{ blob.uploaded_by }}', '{{ blob.url }}')">Delete</button>  
+
+                    </td>  
+                </tr>  
+                {% endfor %}  
+            </tbody>  
+        </table>  
+    </div>
+    <!-- Modal -->  
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">  
+        <div class="modal-dialog">  
+          <div class="modal-content">  
+            <div class="modal-header">  
+              <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>  
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">  
+                <span aria-hidden="true">&times;</span>  
+              </button>  
+            </div>  
+            <div class="modal-body">  
+                <p><strong>File Name:</strong> <span id="modalFileName"></span></p>  
+                <p><strong>Type:</strong> <span id="modalFileType"></span></p>  
+                <p><strong>Uploader:</strong> <span id="modalUploader"></span></p>  
+                <p><strong>URL:</strong> <a href="#" id="modalFileURL" target="_blank"></a></p>  
+                <input type="text" id="confirmFileName" class="form-control" placeholder="Enter file name to confirm">  
+                <small id="errorMessage" class="text-danger" style="display: none;">File name does not match.</small>  
+              </div>                  
+            <div class="modal-footer">  
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>  
+              <button type="button" id="confirmDeleteButton" class="btn btn-danger" disabled>Delete</button>  
+            </div>  
+          </div>  
+        </div>  
+      </div>  
+        
+    
+      
+    {% if error_message %}  
+    <div class="alert alert-danger text-center" role="alert">  
+        {{ error_message }}  
+    </div>  
+    {% endif %}  
+    <!-- <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>   -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">  
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>  
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>      
+  
+</body>
 </html>  
