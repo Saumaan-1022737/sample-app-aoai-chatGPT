@@ -97,7 +97,10 @@ async def file_edit():
     # auth_data = json.loads(base64.b64decode(authenticated_user['client_principal_b64']).decode('utf-8'))
     email_address = authenticated_user['user_name']
     session['email_address'] = email_address
+    session['container_name_ui'] = os.getenv("AZURE_STORAGE_CONTAINER_NAME") 
     session['container_name'] = os.getenv("AZURE_STORAGE_CONTAINER_NAME") 
+    if os.getenv("AZURE_STORAGE_CONTAINER_NAME") == "training-videos-testing":
+        session['container_name_ui'] = "CAD KB"
     users = os.getenv("UPLOAD_USERS")
     if email_address in  users:
         if request.method == "POST":  
@@ -240,18 +243,44 @@ async def prepare_model_args(request_body, request_headers):
     if request_messages[-1]['role'] == 'user' and answer is not None:
         request_messages[-1]['content'] = f"""**query:** \n {query} \n\n\n **Answer from RAG:**\n {answer}"""
     messages = []
-    if not app_settings.datasource:
-        messages = [
-            {
-                "role": "system",
-                "content": """
-**Instruction for Generating and Formatting the Response** 
-1. Provide a detailed, step-by-step response to the user's query.  
-2. If the query includes **Answer from RAG**, use only that answer without referencing other sources or prior knowledge.  
-3. Respond to chit-chat queries appropriately.  
-4. If the query is based on previous conversation, address it accordingly."""
-            }
-        ]
+    if actual_citations != []:
+        system_prompt = """
+**Instruction for Generating and Formatting the Response**   
+1. Answer the user query from **Answer from RAG**, use only **Answer from RAG** without referencing other sources or prior knowledge.  
+2. If Answer is not available in **Answer from RAG**,  just reply stating, 'There is no answer available'.
+3. Write answer in step by step format.  
+"""
+    else:
+        system_prompt = """For every user query you always give this response 'There is no answer available', except Hi, hello, query about you and greeting queries
+
+Example 1:
+Query: Hi.
+Your response: Hello! How can I assist you today?
+
+Example 2:
+Query: How to play football?
+Your response: There is no answer available
+
+Example 3:
+Query: What do you do?
+Your response: I assist with a wide range of tasks, from answering questions and providing guidance to helping with technical issues, brainstorming ideas, and more
+
+Example 4:
+Query: My pc is running slow?
+Your response: There is no answer available
+
+"""
+
+
+    # if not app_settings.datasource:
+    print(system_prompt)
+    print(answer)
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
 
     for message in request_messages:
         if message:

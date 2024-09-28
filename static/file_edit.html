@@ -27,13 +27,19 @@
         .table th {  
             background-color: #007bff;  
             color: white;  
+        }
+        .table th.small-head {  
+            font-size: 0.9em;   
+        }
+        .table th.esmall-head {  
+            font-size: 0.8em;   
         }  
         .table td {  
             background-color: #f9f9f9;  
         }  
         .table td.small-font {  
             font-size: 0.8em;  
-        } 
+        }
         .custom-file-upload {  
             display: inline-block;  
             padding: 6px 12px;  
@@ -165,7 +171,7 @@
         <div class="form-group row">  
             <label for="container_name" class="col-sm-3 col-form-label">Container:</label>  
             <div class="col-sm-9">  
-                <input type="text" id="container_name" name="container_name" class="form-control" value="{{ session.get('container_name', '') }}" readonly>  
+                <input type="text" id="container_name" name="container_name" class="form-control" value="{{ session.get('container_name_ui', '') }}" readonly>  
             </div>  
         </div>  
         <form action="/file_edit" method="post" enctype="multipart/form-data">  
@@ -197,7 +203,7 @@
                     <select id="type" name="type" class="form-control" onchange="checkFormFields()" disabled>  
                         <option value="">Select Type</option>  
                         <option value="video">video</option>  
-                        <option value="text">wiki</option>  
+                        <option value="wiki">wiki</option>  
                     </select>  
                 </div>  
             </div>  
@@ -206,22 +212,22 @@
             </div>  
         </form>  
     </div>  
-    <h2 class="text-center">{{ session.get('container_name', '') }}</h2>  
+    <h2 class="text-center">{{ session.get('container_name_ui', '') }}</h2>  
     <div class="file-list">  
         <table class="table table-striped">  
             <thead>  
                 <tr>  
-                    <th>File Name</th>  
-                    <th>Type</th>  
-                    <th>Uploader</th>  
-                    <th>Uploaded at</th>  
-                    <th>Action</th>  
+                    <th class="small-head">File Name</th>  
+                    <th class="small-head">Type</th>  
+                    <th class="small-head">Uploader</th>  
+                    <th class="small-head">Timestamp</th>  
+                    <th class="small-head">Action</th>  
                 </tr>  
             </thead>  
             <tbody>  
                 {% for blob in blobs %}  
                 <tr>  
-                    <td>  
+                    <td class="small-font">  
                         <a href="{{ blob.url }}" target="_blank">{{ blob.name }}</a>  
                     </td>  
                     <td class="small-font">{{ blob.type }}</td>  

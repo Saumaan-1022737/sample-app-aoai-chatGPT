@@ -1,4 +1,5 @@
 import os  
+from urllib.parse import urlparse, parse_qs, urlunparse, urlencode, parse_qsl   
 from backend.openai_client import init_openai_client  
 from azure.identity.aio import DefaultAzureCredential  
 from azure.search.documents.aio import SearchClient  
@@ -12,7 +13,8 @@ import json
 import logging
 import base64 
 import re 
-
+# from dotenv import load_dotenv
+# load_dotenv()
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -225,14 +227,31 @@ INSTRUCTIONS:
         }  
         json_string = json.dumps(data)  
         base64_encoded = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')  
-        return "&nav=" + base64_encoded  
+        return base64_encoded #"&nav=" +  base64_encoded 
   
-    @staticmethod  
-    def clean_url(url):  
-        clean_url = re.sub(r'([?&]nav=).*', '', url)  
-        if clean_url[-1] == '?' or clean_url[-1] == '&':  
-            clean_url = clean_url[:-1]  
-        return clean_url
+    # @staticmethod  
+    # def clean_url(url):  
+    #     clean_url = re.sub(r'([?&]nav=).*', '', url)  
+    #     if clean_url[-1] == '?' or clean_url[-1] == '&':  
+    #         clean_url = clean_url[:-1]  
+    #     return clean_url
+    
+    @staticmethod
+    def extract_query_params(url):  
+        parsed_url = urlparse(url)  
+        query_params = parse_qs(parsed_url.query)   
+        clean_url = urlunparse(parsed_url._replace(query=""))  
+        return query_params, clean_url
+    
+    @staticmethod
+    def add_query_params(url, params):  
+        url_parts = list(urlparse(url))   
+        query = dict(parse_qsl(url_parts[4]))   
+        for key, value in params.items():  
+            query[key] = value  
+        url_parts[4] = urlencode(query, doseq=True)  
+    
+        return urlunparse(url_parts)
     
     @staticmethod
     def convert_seconds_to_hhmmss(seconds):  
@@ -291,9 +310,10 @@ INSTRUCTIONS:
                     if self.is_video_link(url_metadata):  
                         timestamp_link = url_metadata + f"#t={start_time}"
                     else:  
-                        decoded_timestamp = self.generate_base64_encoded_string(start_time)  
-                        url = self.clean_url(url_metadata)  
-                        timestamp_link = url + decoded_timestamp
+                        decoded_timestamp = [self.generate_base64_encoded_string(start_time)]  
+                        params, url = self.extract_query_params(url_metadata)
+                        params['nav'] =  decoded_timestamp
+                        timestamp_link = self.add_query_params(url, params)
                 else:
                     timestamp_link = url_metadata
                 actual_citations.append({  
