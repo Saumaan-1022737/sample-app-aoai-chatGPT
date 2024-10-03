@@ -12,7 +12,8 @@ from backend.utils import format_as_ndjson, format_stream_response
 from azure.storage.blob.aio import BlobServiceClient
 from backend.openai_client import init_openai_client
 from backend.settings import app_settings
-from backend.azure_rag import AzureSearchPromptService 
+from backend.azure_rag import AzureSearchPromptService
+from backend.openai_image_client import has_image, image_resolver
 # from dotenv import load_dotenv
 # load_dotenv()
 
@@ -115,9 +116,8 @@ async def file_edit():
                         error_message = "Please provide a correct container name."  
                     else:
                         metadata={'url_metadata': form['url'], 
-                                    'file_name_metadata':form['file_name'],
-                                    'type': form['type'],
-                                    'uploaded_by': email_address}
+                                  'file_name_metadata':form['file_name'],
+                                  'type': form['type'], 'uploaded_by': email_address}
 
                         blob_client = blob_service_client.get_blob_client(container=container_name, blob=file.filename)  
                         await blob_client.upload_blob(file.stream, overwrite=True, metadata=metadata)  
@@ -191,7 +191,7 @@ frontend_settings = {
         "show_chat_history_button": app_settings.ui.show_chat_history_button,
     },
     "sanitize_answer": app_settings.base_settings.sanitize_answer,
-    "oyd_enabled": app_settings.base_settings.datasource_type,
+    "oyd_enabled": False,
 }
 
 
@@ -230,9 +230,14 @@ async def init_cosmosdb_client():
 
     return cosmos_conversation_client
 
+
 async def prepare_model_args(request_body, request_headers):
     request_messages = request_body.get("messages", [])
-    query = request_messages[-1]['content']
+    if await has_image(request_messages[-1]):
+        query = await image_resolver(request_body, request_headers)
+        print("iamge_query", query)
+    else:
+        query = request_messages[-1]['content']
     azure_search_service = AzureSearchPromptService()
     answer = None
     actual_citations, answer, apim_request_id, user_json = await azure_search_service.rag(
@@ -273,8 +278,6 @@ Your response: There is no answer available
 
 
     # if not app_settings.datasource:
-    print(system_prompt)
-    print(answer)
     messages = [
         {
             "role": "system",
@@ -318,6 +321,9 @@ Your response: There is no answer available
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
     messages = request_body.get("messages", [])
+    # with open('image_req.json', 'w') as json_file:
+    #     json.dump(messages, json_file, indent=4)
+
     for message in messages:
         if message.get("role") != 'tool':
             filtered_messages.append(message)
