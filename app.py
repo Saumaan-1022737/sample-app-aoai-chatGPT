@@ -232,10 +232,12 @@ async def init_cosmosdb_client():
 
 
 async def prepare_model_args(request_body, request_headers):
+    rag_filter = None
     request_messages = request_body.get("messages", [])
     if await has_image(request_messages[-1]):
         query = await image_resolver(request_body, request_headers)
-        print("iamge_query", query)
+        #rag_filter = "type eq 'error'"
+        rag_filter = 'error'
     else:
         query = request_messages[-1]['content']
     azure_search_service = AzureSearchPromptService()
@@ -244,7 +246,8 @@ async def prepare_model_args(request_body, request_headers):
                                                             query = query, 
                                                             top=3,
                                                             request_body=request_body,
-                                                            request_headers=request_headers)
+                                                            request_headers=request_headers,
+                                                            rag_filter= rag_filter)
     if request_messages[-1]['role'] == 'user' and answer is not None:
         request_messages[-1]['content'] = f"""**query:** \n {query} \n\n\n **Answer from RAG:**\n {answer}"""
     messages = []
@@ -276,8 +279,6 @@ Your response: There is no answer available
 
 """
 
-
-    # if not app_settings.datasource:
     messages = [
         {
             "role": "system",
@@ -314,15 +315,11 @@ Your response: There is no answer available
         "user": user_json
     }
 
-    # model_args['extra_body'] = rag_args['extra_body']
-
     return model_args, actual_citations, apim_request_id
 
 async def send_chat_request(request_body, request_headers):
     filtered_messages = []
     messages = request_body.get("messages", [])
-    # with open('image_req.json', 'w') as json_file:
-    #     json.dump(messages, json_file, indent=4)
 
     for message in messages:
         if message.get("role") != 'tool':

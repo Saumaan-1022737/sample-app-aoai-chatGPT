@@ -13,6 +13,7 @@ import json
 import logging
 import base64 
 import re 
+# import asyncio
 # from dotenv import load_dotenv
 # load_dotenv()
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,24 +45,58 @@ class AzureSearchPromptService:
         vector = await self.generate_embeddings(query, self.embedding_model)  
         return VectorizedQuery(vector=vector, k_nearest_neighbors=3, fields="text_vector")  
   
-    async def search(self, query: str, top: int = 3) -> List[Any]:  
-        
+    async def search(self, query: str, top: int = 12, rag_filter_query = None) -> List[Any]:  
+        vector_filter_mode = None
+        if rag_filter_query is not None:
+            vector_filter_mode="preFilter"
         async with SearchClient(self.service_endpoint, self.wiki_index, DefaultAzureCredential()) as search_client:
             vector_query = await self.generate_vector_query(query)  
             contexts = await search_client.search(  
                 search_text=query,  
                 vector_queries=[vector_query],  
-                select=["title", "chunk", "url_metadata"],  #todo
-                query_type=QueryType.SEMANTIC,  
+                select=["title", "chunk", "url_metadata", "file_name_metadata", "type"],  #todo
+                query_type=QueryType.SEMANTIC,
+                vector_filter_mode=vector_filter_mode,
+                filter=rag_filter_query,
                 semantic_configuration_name="semantic",  
                 query_caption=QueryCaptionType.EXTRACTIVE,  
                 query_answer=QueryAnswerType.EXTRACTIVE,  
                 top=top  
-            )  
+            )
+
             return [context async for context in contexts]  
-  
-    async def get_prompt_message(self, query: str, top: int = 3) -> (List[Any], str):  
-        contexts = await self.search(query, top)  
+        
+    @staticmethod
+    def get_filter_query(rag_filter):
+        return f"type eq '{rag_filter}'"
+    
+    @staticmethod
+    def context_filtering(contexts):
+        contexts_v = []
+        contexts_c = []
+
+        for item in contexts:
+            if item['type'] in ['video', 'wiki', 'email', 'error']:
+                contexts_v.append(item)
+            elif item['type'] in ['creo_view', 'creo_parametric']:
+                contexts_c.append(item)
+        if len(contexts_v) == 0:
+            contexts = contexts_c[:3]
+        elif len(contexts_v) == 1:
+            contexts = contexts_v + contexts_c[:2]
+        elif len(contexts_v) > 1:
+            contexts = contexts_v[:3]
+        return contexts
+
+    async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
+
+        if rag_filter == 'error': 
+            contexts = await self.search(query, top, self.get_filter_query(rag_filter))
+        else:
+            contexts = await self.search(query, 3, None)
+            print("contexts:\n", contexts)
+            contexts = self.context_filtering(contexts)
+
         context_str = "\n\n".join(  
             f"**documents: {i+1}**\n{context['chunk']}" for i, context in enumerate(contexts)  
         )
@@ -119,7 +154,7 @@ INSTRUCTIONS:
                     return rag_response.choices[0].message.content, [], apim_request_id
     
     @staticmethod
-    def validate_and_convert(input_list, top=3):  
+    def validate_and_convert(input_list, top=10):
         try:  
             def time_to_seconds(time_str):  
                 if not time_str:  
@@ -291,7 +326,7 @@ INSTRUCTIONS:
     
         return filtered_data
     
-    def get_actual_citations(self, citations, contexts, top=3):
+    def get_actual_citations(self, citations, contexts, top=10):
         actual_citations = []
         citations = self.validate_and_convert(citations, top)
         if citations != []:
@@ -303,7 +338,11 @@ INSTRUCTIONS:
                     start_time = citation[0]
                     index = citation[1] - 1
                 url_metadata = contexts[index]['url_metadata']
-                title = contexts[index]['title'].split('.')[0]
+                type_ = contexts[index]['type'] #todo
+                try:
+                    title = contexts[index]['file_name_metadata'].split('.')[0]
+                except:
+                    title = contexts[index]['title'].split('.')[0]
                 type = 'video' #contexts[index]['type'] #todo
                 if type == 'video' and start_time is not None:
                     title = f"{title} @ [{self.convert_seconds_to_hhmmss(start_time)}]"
@@ -320,16 +359,19 @@ INSTRUCTIONS:
                     "FileName": title,  
                     "URL": timestamp_link,  
                     "url_metadata": url_metadata,
-                    "start_time": start_time
+                    "start_time": start_time,
+                    "type": type_
                 })
             actual_citations = self.filter_actual_citations(actual_citations)
+            priority_order = ['video', 'wiki', 'email','error', 'creo_parametric', 'creo_view'] 
+            actual_citations = sorted(actual_citations, key=lambda x: priority_order.index(x['type']))
             actual_citations = [{k: d[k] for k in ('FileName', 'URL')} for d in actual_citations]
         return actual_citations
 
 
     
 
-    async def rag(self, query: str,top: int = 3, request_headers= None, request_body = None):
+    async def rag(self, query: str,top: int = 3, request_headers= None, request_body = None, rag_filter = None):
         user_json = None
         if request_headers is not None and request_body is not None:
             if (self.MS_DEFENDER_ENABLED):
@@ -337,9 +379,10 @@ INSTRUCTIONS:
                 conversation_id = request_body.get("conversation_id", None)        
                 user_json = get_msdefender_user_json(authenticated_user_details, request_headers, conversation_id)
 
-        contexts, messages = await self.get_prompt_message(query, top)
+        contexts, messages = await self.get_prompt_message(query, top, rag_filter)
         tools = [openai.pydantic_function_tool(AnswerCitation)]
         answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
+        top = len(citations)
         actual_citations = self.get_actual_citations(citations, contexts, top)
 
         return actual_citations, answer, apim_request_id, user_json

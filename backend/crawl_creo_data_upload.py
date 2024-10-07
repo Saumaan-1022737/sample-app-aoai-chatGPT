@@ -3,8 +3,8 @@ from azure.storage.blob.aio import BlobServiceClient
 from azure.identity.aio import DefaultAzureCredential  
 import json
 import re
-# from dotenv import load_dotenv
-# load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
   
 async def get_blob_service_client():  
     credential = DefaultAzureCredential()  
@@ -20,8 +20,8 @@ async def file_upload(data_list):
         for data in data_list:  
             url = data.get("URL")  
             # Extract type from URL  
-            type_value = url.split('/')[4] + "_" +  url.split('/')[6]
-            type_value = re.sub(r'[^a-zA-Z0-9]', '_', type_value)
+            type_value = "creo_view" #url.split('/')[4] + "_" +  url.split('/')[6]
+            # type_value = re.sub(r'[^a-zA-Z0-9]', '_', type_value)
               
             # Find the second key other than "URL"  
             for key in data:  

@@ -102,7 +102,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
           <label htmlFor="fileInput" className={styles.fileLabel} aria-label='Upload Image'>
             <FontIcon
               className={styles.fileIcon}
-              iconName={'PhotoCollection'}
+              iconName={'Photo2Add'}
               aria-label='Upload Image'
             />
           </label>
