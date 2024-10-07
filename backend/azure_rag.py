@@ -81,11 +81,18 @@ class AzureSearchPromptService:
             elif item['type'] in ['creo_view', 'creo_parametric']:
                 contexts_c.append(item)
         if len(contexts_v) == 0:
-            contexts = contexts_c[:3]
+            contexts = contexts_c[:4]
         elif len(contexts_v) == 1:
-            contexts = contexts_v + contexts_c[:2]
-        elif len(contexts_v) > 1:
-            contexts = contexts_v[:3]
+            contexts = contexts_v + contexts_c[:3]
+        elif len(contexts_v) == 2:
+            contexts = contexts_v[:2] + contexts_c[:2]
+        elif len(contexts_v) == 3:
+            contexts = contexts_v[:3] + contexts_c[:1]
+        elif len(contexts_v) > 3:
+            contexts = contexts_v[:4]# + contexts_c[:1]
+
+        priority_order = ['video', 'wiki', 'email','error', 'creo_parametric', 'creo_view'] 
+        contexts = sorted(contexts, key=lambda x: priority_order.index(x['type']))
         return contexts
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
@@ -93,7 +100,7 @@ class AzureSearchPromptService:
         if rag_filter == 'error': 
             contexts = await self.search(query, top, self.get_filter_query(rag_filter))
         else:
-            contexts = await self.search(query, 3, None)
+            contexts = await self.search(query, 5, None)
             print("contexts:\n", contexts)
             contexts = self.context_filtering(contexts)
 
@@ -121,6 +128,7 @@ INSTRUCTIONS:
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
 7. Do not create or derive your own answer. If the answer is not directly available in the context, just reply stating, 'There is no answer available'
+8. Points to remember: The first document has the highest priority, with priority decreasing from the first to the last. Therefore, the last document has the lowest priority. If the higher-priority documents contain the complete answers, ignore the lower-priority ones while answering and in citation.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]

@@ -20,20 +20,31 @@ async def file_upload(data_list):
         for data in data_list:  
             url = data.get("URL")  
             # Extract type from URL  
-            type_value = "creo_view" #url.split('/')[4] + "_" +  url.split('/')[6]
+            type_value = "creo_parametric"#"creo_parametric"#"creo_view" #url.split('/')[4] + "_" +  url.split('/')[6]
             # type_value = re.sub(r'[^a-zA-Z0-9]', '_', type_value)
+            if type_value == "creo_view":
+                if url.split('/')[5] == "view":
+                    pass
+                else:
+                    raise ValueError(f"{url}\nurl does not belongs to creo_view")
+            elif type_value == "creo_parametric":
+                if url.split('/')[5] == "creo_pma":
+                    pass
+                else:
+                    raise ValueError(f"{url}\nurl does not belongs to creo_parametric")
+                    
               
             # Find the second key other than "URL"  
             for key in data:  
                 if key != "URL":  
-                    file_name = key + ".txt"  
-                    file_content = data[key]  
+                    file_name = re.sub(r'[^A-Za-z0-9]', ' ', key) + ".txt"  
+                    file_content = f"**{re.sub(r'[^A-Za-z0-9]', ' ', key)}\n\n**"+ data[key]  
                     break  
               
             # Metadata  
             metadata = {  
                 'url_metadata': url,  
-                'file_name_metadata': key,  
+                'file_name_metadata': re.sub(r'[^A-Za-z0-9]', ' ', key),  
                 'type': type_value,  
                 'uploaded_by': "crawlers@ms.com"  
             }  
@@ -54,7 +65,7 @@ async def file_upload(data_list):
 # Call the function with the data list  
   
 def read_json_file(file_path):  
-    with open(file_path, 'r') as file:  
+    with open(file_path, 'r', encoding='utf-8') as file:  
         data_list = json.load(file)  
     return data_list  
   
@@ -62,7 +73,6 @@ def read_json_file(file_path):
 if __name__ == "__main__":  
     import asyncio  
   
-    json_file_path = r'C:\Users\v-samomin\Downloads\extracted_data 2.json'  
+    json_file_path = r'C:\Users\v-samomin\Downloads\CREO VIEW & PMA 100\CREO_PMA\CREO-PMA_Data.json'  
     data_list = read_json_file(json_file_path)  
-  
-    asyncio.run(file_upload(data_list))  
+    asyncio.run(file_upload(data_list))
