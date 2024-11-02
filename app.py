@@ -26,29 +26,32 @@ async def get_blob_service_client():
     return blob_service_client, credential
 
 
+
+
 async def list_blobs_with_metadata(blob_service_client, credential, container_name):   
     container_client = blob_service_client.get_container_client(container_name)  
       
-    blob_list = []  
+    blob_list = []
     async for blob in container_client.list_blobs():
-        metadata_ = {'name': None,
-                    'url':None,
-                    'uploaded_by': None,
-                    'type':None}
-        blob_client = container_client.get_blob_client(blob)  
-        blob_properties = await blob_client.get_blob_properties()  
-        blob_metadata = blob_properties.metadata
-        
-        metadata_['name'] = blob.name
-        metadata_['uploaded_at'] = blob.last_modified.strftime("%d/%m/%Y %H:%M:%S")
-        if 'url_metadata' in blob_metadata:
-            metadata_['url'] = blob_metadata['url_metadata']
-        if 'uploaded_by' in blob_metadata:
-            metadata_['uploaded_by'] = blob_metadata['uploaded_by']
-        if 'type' in blob_metadata:
-            metadata_['type'] = blob_metadata['type']
+        if '/' not in blob.name: 
+            metadata_ = {'name': None,
+                        'url':None,
+                        'uploaded_by': None,
+                        'type':None}
+            blob_client = container_client.get_blob_client(blob)  
+            blob_properties = await blob_client.get_blob_properties()  
+            blob_metadata = blob_properties.metadata
             
-        blob_list.append(metadata_)  
+            metadata_['name'] = blob.name
+            metadata_['uploaded_at'] = blob.last_modified.strftime("%d/%m/%Y %H:%M:%S")
+            if 'url_metadata' in blob_metadata:
+                metadata_['url'] = blob_metadata['url_metadata']
+            if 'uploaded_by' in blob_metadata:
+                metadata_['uploaded_by'] = blob_metadata['uploaded_by']
+            if 'type' in blob_metadata:
+                metadata_['type'] = blob_metadata['type']
+                
+            blob_list.append(metadata_)  
       
     return blob_list 
 
