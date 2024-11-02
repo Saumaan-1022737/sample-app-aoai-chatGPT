@@ -14,10 +14,14 @@ async def get_blob_service_client():
   
 async def file_upload(data_list):  
     container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME")  
-    blob_service_client, credential = await get_blob_service_client()  
+    blob_service_client, credential = await get_blob_service_client()
+    c = 0
   
     try:  
-        for data in data_list:  
+        for data in data_list:
+            blob_service_client, credential = await get_blob_service_client()
+            c = c+1
+            print(c)
             url = data.get("URL")  
             # Extract type from URL  
             type_value = "creo_parametric"#"creo_parametric"#"creo_view" #url.split('/')[4] + "_" +  url.split('/')[6]
@@ -61,18 +65,92 @@ async def file_upload(data_list):
     finally:  
         await blob_service_client.close()  
         await credential.close()   
-  
-# Call the function with the data list  
+
+def convert_to_version(version_str):
+    version_num = int(version_str)
+    major = version_num // 10
+    minor = version_num % 10
+    build = 0
+    revision = 0
+    return f"{major}.{minor}.{build}.{revision}"
+
+def get_whats_new(data_list):
+    whats_new = {}
+    for data in data_list:
+        if "whats_new" in data['URL']:
+            for key in data:
+                if key != "URL":
+                    other_key = key
+            try:
+                version = data['URL'].split('/')[10]
+                version_name = convert_to_version(version)
+            except:
+                if '/creo_pma/' in data['URL']:
+                    version = data[other_key].split(" ")[2].split('\n')[0]
+                    version_name = version
+
+
+            if version in list(whats_new.keys()):
+                whats_new[version]['text'] = whats_new[version]['text'] + f"\n- { whats_new[version]['counter']}. {other_key}"
+                whats_new[version]['counter'] = whats_new[version]['counter'] + 1
+            
+            else:
+                whats_new[version] = {'text': f"# What's New in _tool_name_placeholder_ {version_name}\n- 1. {other_key}",
+                                    'counter': 1}
+                
+        elif ("/welcome/" in data['URL'] or "/introduction/" in data['URL']):
+            if 'metadata_url' in locals():
+                pass
+            else:
+                metadata_url = data['URL']
+                if data['URL'].split('/')[8] == "creo_view":
+                    metadata_type = "creo_view"
+                    file_name_metadata = "whats new in Creo View"
+                    file_name = "whats new in Creo View.txt"
+                    tool_name = "Creo View"
+                else:
+                    metadata_type = "creo_parametric"
+                    file_name_metadata = "whats new in Creo Parametric"
+                    file_name = "whats new in Creo Parametric.txt"
+                    tool_name = "Creo Parametric"
+
+    metadata = {  
+    'url_metadata': metadata_url,  
+    'file_name_metadata': file_name_metadata,  
+    'type': metadata_type,  
+    'uploaded_by': "crawlers@ms.com"  
+    } 
+
+            
+    whats_new_text = ""
+    for i in whats_new:
+        if whats_new_text == "":
+            whats_new_text = whats_new_text + whats_new[i]['text']
+        else:
+            whats_new_text = whats_new_text +"\n\n\n"+whats_new[i]['text']
+    whats_new_text = whats_new_text.replace("_tool_name_placeholder_", tool_name)
+
+    whats_new_text_format = [{
+        'URL': metadata_url,
+        file_name_metadata: whats_new_text
+    }]
+
+
+    return whats_new_text_format
+
+# # Call the function with the data list  
   
 def read_json_file(file_path):  
     with open(file_path, 'r', encoding='utf-8') as file:  
         data_list = json.load(file)  
-    return data_list  
+    return data_list
   
 # Example usage  
 if __name__ == "__main__":  
     import asyncio  
   
-    json_file_path = r'C:\Users\v-samomin\Downloads\CREO VIEW & PMA 100\CREO_PMA\CREO-PMA_Data.json'  
-    data_list = read_json_file(json_file_path)  
+    json_file_path = r"C:\Users\v-samomin\Downloads\CREO_PMA\CREO_PMA\CREO-PMA_Data.json" 
+    data_list = read_json_file(json_file_path)
+    data_list = get_whats_new(data_list) + data_list
+
     asyncio.run(file_upload(data_list))

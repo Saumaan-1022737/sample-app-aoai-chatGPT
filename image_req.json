@@ -1,0 +1,24 @@
+[
+    {
+        "id": "030e8590-df47-940f-71f9-dc80a2c65030",
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "Explain this image"
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/jpeg;base64,/9j/4VC3RXhpZgAASUkqAA"}
+            }
+        ],
+        "date": "2024-09-28T08:48:37.271Z"
+    },
+    {
+        "id": "3b890410-254c-4a21-8ff7-a9fd1d762d89",
+        "role": "user",
+        "content": "What is config.pro",
+        "date": "2024-09-28T08:48:54.729Z"
+    }
+]

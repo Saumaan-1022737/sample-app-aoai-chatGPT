@@ -244,7 +244,7 @@ async def prepare_model_args(request_body, request_headers):
     answer = None
     actual_citations, answer, apim_request_id, user_json = await azure_search_service.rag(
                                                             query = query, 
-                                                            top=3,
+                                                            top=15,
                                                             request_body=request_body,
                                                             request_headers=request_headers,
                                                             rag_filter= rag_filter)

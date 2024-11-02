@@ -13,7 +13,7 @@ import json
 import logging
 import base64 
 import re 
-# import asyncio
+import asyncio
 # from dotenv import load_dotenv
 # load_dotenv()
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,6 +33,7 @@ class AzureSearchPromptService:
         self.wiki_index = os.getenv("AZURE_SEARCH_INDEX_VIDEO")  #AZURE_SEARCH_INDEX_VIDEO
         self.embedding_model = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME")  
         self.chat_model = os.environ.get("AZURE_OPENAI_MODEL")
+        self.chat_model_mini = os.environ.get("AZURE_OPENAI_MODEL_MINI")
         self.MS_DEFENDER_ENABLED = os.environ.get("MS_DEFENDER_ENABLED", "true").lower() == "true"
   
     async def generate_embeddings(self, query, model):
@@ -94,15 +95,28 @@ class AzureSearchPromptService:
         priority_order = ['video', 'wiki', 'email','error', 'creo_parametric', 'creo_view'] 
         contexts = sorted(contexts, key=lambda x: priority_order.index(x['type']))
         return contexts
+    
+    async def run_parallel_searches(self, query):  
+        tasks = [  
+            self.search(query, 2, self.get_filter_query("video")),  
+            self.search(query, 2, self.get_filter_query("wiki")),  
+            self.search(query, 2, self.get_filter_query("error")),  
+            self.search(query, 2, self.get_filter_query("creo_view")),  
+            self.search(query, 2, self.get_filter_query("creo_parametric")),  
+        ]
+        contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+        return contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric
 
-    async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
+    async def get_prompt_message(self, query: str, top: int = 15, rag_filter = None) -> (List[Any], str):
 
         if rag_filter == 'error': 
-            contexts = await self.search(query, top, self.get_filter_query(rag_filter))
+            contexts = await self.search(query, 3, self.get_filter_query("error"))
         else:
-            contexts = await self.search(query, 5, None)
+            contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await self.run_parallel_searches(query)
+            contexts = contexts_video + contexts_wiki + contexts_error + contexts_creo_view + contexts_creo_parametric
+            
             print("contexts:\n", contexts)
-            contexts = self.context_filtering(contexts)
+            # contexts = self.context_filtering(contexts)
 
         context_str = "\n\n".join(  
             f"**documents: {i+1}**\n{context['chunk']}" for i, context in enumerate(contexts)  
@@ -128,12 +142,23 @@ INSTRUCTIONS:
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
 7. Do not create or derive your own answer. If the answer is not directly available in the context, just reply stating, 'There is no answer available'
-8. Points to remember: The first document has the highest priority, with priority decreasing from the first to the last. Therefore, the last document has the lowest priority. If the higher-priority documents contain the complete answers, ignore the lower-priority ones while answering and in citation.
+8. Points to remember: The first document has the highest priority, with priority decreasing from the first to the last. Therefore, the last document has the lowest priority. If the higher-priority documents contain the complete answers, ignore the lower-priority ones while answering and in citation.  If the higher-priority documents does not contains the answer then concider the lower-priority ones while answering and in citation
 """
+# 9. Your response should be JSON serializabile in the schema defined blow within backticks
+# Output Schema:
+# ```
+# {
+# "answer": (str) <Only include Answer, do not include any citations in this. In case of no answer, this will be 'There is no answer available'>
+# "citation": (List[List[str]]) <Always include all the citations. in case of no answer this will be [[]]>
+# }
+# ```
+
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
         
 
+        
+        print(messages)
         return contexts, messages 
   
     async def openai_with_retry(self, messages, tools, user_json, max_retries=3):  
@@ -144,7 +169,7 @@ INSTRUCTIONS:
                 model=self.chat_model,  
                 messages=messages,  
                 tools=tools,  
-                temperature=0,  
+                temperature=0.05,  
                 user=user_json  
             )  
             rag_response = raw_rag_response.parse()  
@@ -162,7 +187,7 @@ INSTRUCTIONS:
                     return rag_response.choices[0].message.content, [], apim_request_id
     
     @staticmethod
-    def validate_and_convert(input_list, top=10):
+    def validate_and_convert(input_list, top=15):
         try:  
             def time_to_seconds(time_str):  
                 if not time_str:  
@@ -334,7 +359,7 @@ INSTRUCTIONS:
     
         return filtered_data
     
-    def get_actual_citations(self, citations, contexts, top=10):
+    def get_actual_citations(self, citations, contexts, top=15):
         actual_citations = []
         citations = self.validate_and_convert(citations, top)
         if citations != []:
@@ -379,7 +404,7 @@ INSTRUCTIONS:
 
     
 
-    async def rag(self, query: str,top: int = 3, request_headers= None, request_body = None, rag_filter = None):
+    async def rag(self, query: str,top: int = 15, request_headers= None, request_body = None, rag_filter = None):
         user_json = None
         if request_headers is not None and request_body is not None:
             if (self.MS_DEFENDER_ENABLED):

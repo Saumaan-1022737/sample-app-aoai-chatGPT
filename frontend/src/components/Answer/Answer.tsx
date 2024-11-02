@@ -58,7 +58,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   
 
 
-  const [isRefAccordionOpen, { toggle: toggleIsRefAccordionOpen }] = useBoolean(false)
+  const [isRefAccordionOpen, { toggle: toggleIsRefAccordionOpen }] = useBoolean(true)
   const filePathTruncationLimit = 50
 
   const parsedAnswer = useMemo(() => parseAnswer(answer), [answer])
