@@ -246,32 +246,109 @@ INSTRUCTIONS:
     
 
 
-    def extract_list_from_string(self, s):
+    def extract_and_remove_lists(self, s):
         """
-        Extracts a list from a given string.
+        Extracts all lists and lists of lists from the input string,
+        combines them into a list of lists, and removes them from the string.
 
-        Parameters:
-            s (str): The input string containing a list.
+        Args:
+            s (str): The input string containing lists.
 
         Returns:
-            list or None: The extracted list if found, otherwise None.
+            tuple: A tuple containing the combined list of lists and the modified string.
         """
-        # Use regular expression to find the list inside the string
-        match = re.search(r'(\[\[.*?\]\])', s)
-        if match:
-            list_str = match.group(1)
-            try:
-                # Safely evaluate the string to a Python list
-                list_data = ast.literal_eval(list_str)
-                return list_data
-            except (SyntaxError, ValueError):
-                # Handle cases where the extracted string is not a valid list
-                print("Found list pattern but couldn't parse it.")
-                return None
-        else:
-            return None  # No list found in the string
+        in_bracket = False
+        bracket_level = 0
+        in_string = False
+        string_char = ''
+        current_chunk = ''
+        extracted_lists = []
+        last_index = 0
+        result_string = ''
+        i = 0
+        n = len(s)
+        
+        while i < n:
+            c = s[i]
+            if in_bracket:
+                current_chunk += c
+                if in_string:
+                    if c == string_char and (i == 0 or s[i-1] != '\\'):
+                        in_string = False
+                else:
+                    if c == '"' or c == "'":
+                        in_string = True
+                        string_char = c
+                    elif c == '[':
+                        bracket_level += 1
+                    elif c == ']':
+                        if bracket_level > 0:
+                            bracket_level -= 1
+                        else:
+                            in_bracket = False
+                            end_pos = i + 1
+                            # Try to parse current_chunk
+                            try:
+                                # Process the list string to handle unquoted elements
+                                list_data = self.process_list_string(current_chunk)
+                                # Flatten the list if it's a list of lists
+                                if isinstance(list_data, list):
+                                    if all(isinstance(elem, list) for elem in list_data):
+                                        extracted_lists.extend(list_data)
+                                    else:
+                                        extracted_lists.append(list_data)
+                                    # Append text before the list
+                                    result_string += s[last_index:start_pos]  # noqa: F821
+                                    last_index = end_pos
+                            except (SyntaxError, ValueError):
+                                pass
+                            current_chunk = ''
+                    else:
+                        pass
+            else:
+                if c == '[':
+                    in_bracket = True
+                    start_pos = i
+                    current_chunk = c
+                    bracket_level = 0
+            i += 1
+
+        # Append the remaining text
+        result_string += s[last_index:]
+
+        if extracted_lists == []:
+            extracted_lists = [[]]
+
+        return extracted_lists, result_string
+
+    def process_list_string(self, list_str):
+        """
+        Processes a list string to ensure all elements are properly quoted.
+
+        Args:
+            list_str (str): The list string to process.
+
+        Returns:
+            list: The evaluated list with properly quoted elements.
+        """
+        # Pattern to match unquoted words (excluding commas, brackets, and whitespace)
+        pattern = r'(?<=\[|,|\s)([^\s\[\],]+)(?=,|\s|\])'
+        
+        def replacer(match):
+            word = match.group(1)
+            # Check if the word is already quoted
+            if not (word.startswith('"') and word.endswith('"')) and not (word.startswith("'") and word.endswith("'")):
+                # Wrap unquoted elements with double quotes
+                return '"' + word + '"'
+            else:
+                return word
+        
+        # Apply the pattern to replace unquoted elements
+        processed_list_str = re.sub(pattern, replacer, list_str)
+        # Safely evaluate the processed list string
+        return ast.literal_eval(processed_list_str)
     
-    async def openai_with_retry(self, messages, tools, user_json, max_retries=1):  
+    async def openai_with_retry(self, messages, tools, user_json, max_retries=2):  
         retries = 0  
         while retries < max_retries:    
             azure_openai_client = await init_openai_client()  
@@ -296,9 +373,15 @@ INSTRUCTIONS:
             except Exception as e:
                 try:
                     rag_str_response = rag_response.choices[0].message.content
-                    answer = rag_str_response.split("\nCitations")[0].split("\nCitation")[0]
-                    citations = self.extract_list_from_string(rag_str_response)
-                    citations = self.convert_list_format(citations)
+                    # print("rag_str_response", rag_str_response)
+                    
+                    citations, answer = self.extract_and_remove_lists(rag_str_response)
+                    answer = answer.split("\nCitations")[0].split("\nCitation")[0]
+
+                    if citations == [[]]:
+                        raise ValueError("An error occurred because of invalid input") 
+                    
+                    citations = self.convert_list_format(citations) 
                     return answer, citations, apim_request_id 
                 except Exception as e2:
                     retries += 1  
