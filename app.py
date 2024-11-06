@@ -267,6 +267,7 @@ async def prepare_model_args(request_body, request_headers):
 **Instruction for Generating and Formatting the Response**   
 1. **Answer from RAG** is a correct answer to unser's query, therefore in response just use re-write **Answer from RAG** without referencing other sources or prior knowledge.  
 2. Re-Write **Answer from RAG** in step by step format.
+3. if **Answer from RAG** contains this "the context provided does not provided the specific detais", "There is no answer available" or similar then do not re-write **Answer from RAG**, Just state There isn't an available answer at the moment, but I've included a few articles in the citations that may be helpful or something similar in step by step format 
 
 {resolver_string}
 """
