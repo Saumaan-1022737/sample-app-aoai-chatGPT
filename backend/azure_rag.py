@@ -501,7 +501,7 @@ INSTRUCTIONS:
         tools = [openai.pydantic_function_tool(AnswerCitation)]
         answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
         # top = len(citations)
-        actual_citations = self.get_actual_citations(citations, contexts, 6)
+        actual_citations = self.get_actual_citations(citations, contexts, 10)
 
         return actual_citations, answer, apim_request_id, user_json
 
