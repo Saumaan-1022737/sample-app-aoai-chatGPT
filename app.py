@@ -13,6 +13,7 @@ from azure.storage.blob.aio import BlobServiceClient
 from backend.openai_client import init_openai_client
 from backend.settings import app_settings
 from backend.azure_rag import AzureSearchPromptService
+from backend.resolver_group import find_resolver_group
 from backend.openai_image_client import has_image, image_resolver
 # from dotenv import load_dotenv
 # load_dotenv()
@@ -251,18 +252,27 @@ async def prepare_model_args(request_body, request_headers):
                                                             request_body=request_body,
                                                             request_headers=request_headers,
                                                             rag_filter= rag_filter)
+    
+    resolver_group = await find_resolver_group(query)
+    resolver_string = ""
+
+    if resolver_group != 'None':
+        resolver_string = f"Also add this in response like For further assistent related to this reach out to {resolver_group}"
+    
     if request_messages[-1]['role'] == 'user' and answer is not None:
         request_messages[-1]['content'] = f"""**query:** \n {query} \n\n\n **Answer from RAG:**\n {answer}"""
     messages = []
     if actual_citations != []:
-        system_prompt = """
+        system_prompt = f"""
 **Instruction for Generating and Formatting the Response**   
 1. Answer the user query from **Answer from RAG**, use only **Answer from RAG** without referencing other sources or prior knowledge.  
 2. If Answer is not available in **Answer from RAG**,  just reply stating, 'There is no answer available'.
-3. Write answer in step by step format.  
+3. Write answer in step by step format. 
+
+{resolver_string}
 """
     else:
-        system_prompt = """For every user query you always give this response 'There is no answer available', except Hi, hello, query about you and greeting queries
+        system_prompt = f"""For every user query you always give this response 'There is no answer available', except Hi, hello, query about you and greeting queries
 
 Example 1:
 Query: Hi.
@@ -280,6 +290,9 @@ Example 4:
 Query: My pc is running slow?
 Your response: There is no answer available
 
+
+
+{resolver_string}
 """
 
     messages = [
