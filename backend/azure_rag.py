@@ -158,6 +158,9 @@ class AzureSearchPromptService:
                 temperature=0.05
             )
         
+        if response.class_label.name.upper() == "NO":
+            return None
+        
         return response.class_label.name
 
     
@@ -193,13 +196,15 @@ class AzureSearchPromptService:
             ("YES" if res else "NO", ctx) for res, ctx in zip(results, contexts_video[:2] + contexts_wiki[:2] + contexts_error + contexts_creo_view + contexts_creo_parametric)
         ]
 
+        print("contexts_map", contexts_map)
+
         # Build the final context list with a maximum of 5 entries
         context = []
         for answer, ctx in contexts_map:
             if answer.upper() == "YES" and len(context) < 7:
                 context.append(ctx)
 
-        print(context)
+        # print(context)
         return context
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
@@ -261,7 +266,7 @@ INSTRUCTIONS:
                 answer = structure_response['answer']
                 citations = structure_response['citation']
                 citations = self.convert_list_format(citations)
-                print(citations)
+                # print(citations)
 
                 return answer,citations, apim_request_id 
             except Exception as e:  
