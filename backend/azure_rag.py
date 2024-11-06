@@ -238,7 +238,7 @@ INSTRUCTIONS:
     - For transcript, use: [timestamp, documents number]. for example [["00:11:00", "1"], ["00:1:44", "2"]]
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
-6. Drive answer from the given context, If the answer or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
+6. If the answer to the user's query or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
@@ -490,6 +490,26 @@ INSTRUCTIONS:
             actual_citations = sorted(actual_citations, key=lambda x: priority_order.index(x['type']))
             actual_citations = [{k: d[k] for k in ('FileName', 'URL')} for d in actual_citations]
         return actual_citations
+    
+    def correct_time_string(self, time_str):
+        if time_str == "":
+            return time_str
+        # Split the input string on ':'
+        parts = time_str.split(':')
+        # Replace empty strings with '0' to handle cases like ':04'
+        parts = [part if part else '0' for part in parts]
+        # Reverse the parts to process from seconds upwards
+        parts = parts[::-1]
+        # Pad missing parts with '0' to ensure there are three parts
+        while len(parts) < 3:
+            parts.append('0')
+        # Reverse back to get hours, minutes, seconds
+        parts = parts[::-1]
+        # Pad each part with leading zeros to ensure two digits
+        parts = [part.zfill(2) for part in parts]
+        # Join the parts with ':' to form the corrected time string
+        corrected_time = ':'.join(parts)
+        return corrected_time
 
 
     
@@ -506,6 +526,11 @@ INSTRUCTIONS:
         tools = [openai.pydantic_function_tool(AnswerCitation)]
         answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
         # top = len(citations)
+        actual_citations = self.get_actual_citations(citations, contexts, 10)
+        if actual_citations == [] and citations != [[]]:
+            for i in range(len(citations)):
+                if citations[i][0] != "":
+                    citations[i][0] = self.correct_time_string(citations[i][0])
         actual_citations = self.get_actual_citations(citations, contexts, 10)
 
         return actual_citations, answer, apim_request_id, user_json
