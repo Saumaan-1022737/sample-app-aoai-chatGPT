@@ -26,9 +26,9 @@ class AnswerCitation(BaseModel):
     """ 
     Citations and Answer
     """ 
-    citation: List[List[str]] = Field([[]], description="Always include all the citations. in case of no answer citation=[[]] ")
+    citation: List[List[str]] = Field(description="Always include all the citations. in case of no answer citation=[[]] ")
     
-    answer: str = Field(description="Only include Answer, do not include any citations in this. In case of no answer, answer = 'There is no answer available'") 
+    answer: str = Field(description="Only include Answer, do not include any citations in this.") 
   
 class Labels(str, enum.Enum):
     YES = "Yes"
@@ -105,7 +105,34 @@ class AzureSearchPromptService:
         contexts = sorted(contexts, key=lambda x: priority_order.index(x['type']))
         return contexts
     
+    def convert_list_format(self, lst):
+        """
+        Converts sublists in the format [', number'] to ['', 'number'].
+
+        Parameters:
+        lst (list of lists): The input list of lists.
+
+        Returns:
+        list of lists: The list with converted sublists.
+        """
+        pattern = re.compile(r'^,\s*(\d+)$')
+        new_list = []
+        for sublist in lst:
+            # Join the elements of the sublist to form the complete string
+            s = ''.join(sublist)
+            match = pattern.match(s)
+            if match:
+                # Extract the number part from the matched pattern
+                number = match.group(1)
+                # Replace the sublist with ['', 'number']
+                new_list.append(['', number])
+            else:
+                # Keep the sublist as is if it doesn't match the pattern
+                new_list.append(sublist)
+        return new_list
+    
     async def check_answer(self,query, context):
+        context_str = context['chunk']
         system_prompt = f"""
  **Task:** You will be provided with a small chunk of document or transcript.
   **Objective:** Determine if the given query, can be answered using the chunk of document.
@@ -113,14 +140,14 @@ class AzureSearchPromptService:
   1. **Strict Evaluation:** Review the chunk of document carefully. Assess whether the information within it directly addresses the query.
   2. **Binary Response:**
     - Respond with **"Yes"** if the chunk of document contains sufficient information to answer the query.
-    - Respond with **"No"** if the chunk of document does not contain sufficient information to answer the query or any part of it.
+    - Respond with **"No"** if the chunk of document does not contain sufficient information to answer the query.
   3. **No Further Explanation:** Provide only the binary response ("Yes" or "No"). Do not include any additional explanation, reasoning, or details.
   
-  
+
   **query**: {query}
 
   
-  **Chunk of document**:\n\n{context}
+  **Chunk of document**:\n\n{context_str}
 """
         inst_client = instructor.from_openai(await init_openai_client())
 
@@ -128,7 +155,7 @@ class AzureSearchPromptService:
                 model="ssagpt4omini",
                 response_model=SinglePrediction,
                 messages=[{"role": "system", "content": system_prompt}],
-                temperature=0.0
+                temperature=0.05
             )
         
         return response.class_label.name
@@ -145,30 +172,34 @@ class AzureSearchPromptService:
         contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
 
         tasks_2 = [  
-            self.check_answer(query, contexts_video),  
-            self.check_answer(query, contexts_wiki),  
-            self.check_answer(query, contexts_error),  
-            self.check_answer(query, contexts_creo_view),  
-            self.check_answer(query, contexts_creo_parametric),  
+            self.check_answer(query, contexts_video[0]) if len(contexts_video) > 0 else None,
+            self.check_answer(query, contexts_video[1]) if len(contexts_video) > 1 else None,
+            # self.check_answer(query, contexts_video[2]) if len(contexts_video) > 2 else None,
+            self.check_answer(query, contexts_wiki[0]) if len(contexts_wiki) > 0 else None,
+            self.check_answer(query, contexts_wiki[1]) if len(contexts_wiki) > 1 else None,
+            # self.check_answer(query, contexts_wiki[2]) if len(contexts_wiki) > 2 else None,
+            self.check_answer(query, contexts_error[0]) if len(contexts_error) > 0 else None,
+            self.check_answer(query, contexts_error[1]) if len(contexts_error) > 1 else None,
+            self.check_answer(query, contexts_creo_view[0]) if len(contexts_creo_view) > 0 else None,
+            self.check_answer(query, contexts_creo_view[1]) if len(contexts_creo_view) > 1 else None,
+            self.check_answer(query, contexts_creo_parametric[0]) if len(contexts_creo_parametric) > 0 else None,
+            self.check_answer(query, contexts_creo_parametric[1]) if len(contexts_creo_parametric) > 1 else None,
         ]
 
-        ans_video, ans_wiki, ans_error, ans_creo_view, ans_creo_parametric = await asyncio.gather(*tasks_2)
+        results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
 
+        # Map results to the context responses for easy access
+        contexts_map = [
+            ("YES" if res else "NO", ctx) for res, ctx in zip(results, contexts_video[:2] + contexts_wiki[:2] + contexts_error + contexts_creo_view + contexts_creo_parametric)
+        ]
+
+        # Build the final context list with a maximum of 5 entries
         context = []
-        if ans_video.upper() == "YES":
-            context = context + contexts_video
-        elif ans_wiki.upper() == "YES":
-            context = context + contexts_wiki
-        elif ans_error.upper() == "YES":
-            context = context + contexts_error
-        elif ans_creo_view.upper() == "YES":
-            context = context + contexts_creo_view
-        elif ans_creo_parametric.upper() == "YES":
-            context = context + contexts_creo_parametric
-        else:
-            context = []
-        
+        for answer, ctx in contexts_map:
+            if answer.upper() == "YES" and len(context) < 7:
+                context.append(ctx)
 
+        print(context)
         return context
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
@@ -180,7 +211,7 @@ class AzureSearchPromptService:
             # print("contexts:\n", contexts)
 
         context_str = "\n\n".join(  
-            f"**documents: {i+1}**\n{context['chunk']}" for i, context in enumerate(contexts)  
+            f"""**documents: "{i+1}"**\n{context['chunk']}""" for i, context in enumerate(contexts)  
         )
         rag_user_query = f"""
 Context information is below.
@@ -202,7 +233,7 @@ INSTRUCTIONS:
     - For transcript, use: [timestamp, documents number]. for example [["00:11:00", "1"], ["00:1:44", "2"]]
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
-6. Do not create or derive your own answer. If the answer is not directly available in the context, just reply stating, 'There is no answer available'
+6. If the answer or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
@@ -210,18 +241,34 @@ INSTRUCTIONS:
 
         return contexts, messages 
   
-    async def openai_with_retry(self, messages, tools, user_json, max_retries=3):
-          
-        inst_client = instructor.from_openai(await init_openai_client())
-        response = await inst_client.chat.completions.create(
-                model="ssagpt4o",
-                response_model=AnswerCitation,
-                messages=messages,
-                temperature=0.05
-            )
-        return response.answer,  response.citation, None
-    # answer, citations, apim_request_id
-        
+    async def openai_with_retry(self, messages, tools, user_json, max_retries=1):  
+        retries = 0  
+        while retries < max_retries:    
+            azure_openai_client = await init_openai_client()  
+            raw_rag_response = await azure_openai_client.chat.completions.with_raw_response.create(  
+                model=self.chat_model,  
+                messages=messages,  
+                tools=tools,  
+                temperature=0.1,  
+                user=user_json  
+            )  
+            rag_response = raw_rag_response.parse()  
+            apim_request_id = raw_rag_response.headers.get("apim-request-id")
+            print("rag_response.choices[0]",rag_response.choices[0])
+
+            try:  
+                structure_response = json.loads(rag_response.choices[0].message.tool_calls[0].function.arguments)
+                answer = structure_response['answer']
+                citations = structure_response['citation']
+                citations = self.convert_list_format(citations)
+                print(citations)
+
+                return answer,citations, apim_request_id 
+            except Exception as e:  
+                retries += 1  
+                print(f"Attempt {retries} failed: {e}")  
+                if retries >= max_retries:  
+                    return rag_response.choices[0].message.content, [], apim_request_id
     
     @staticmethod
     def validate_and_convert(input_list, top=10):
@@ -396,6 +443,7 @@ INSTRUCTIONS:
     
         return filtered_data
     
+    
     def get_actual_citations(self, citations, contexts, top=10):
         actual_citations = []
         citations = self.validate_and_convert(citations, top)
@@ -452,8 +500,8 @@ INSTRUCTIONS:
         contexts, messages = await self.get_prompt_message(query, top, rag_filter)
         tools = [openai.pydantic_function_tool(AnswerCitation)]
         answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
-        top = len(citations)
-        actual_citations = self.get_actual_citations(citations, contexts, top)
+        # top = len(citations)
+        actual_citations = self.get_actual_citations(citations, contexts, 6)
 
         return actual_citations, answer, apim_request_id, user_json
 

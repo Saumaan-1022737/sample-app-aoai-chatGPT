@@ -257,7 +257,7 @@ async def prepare_model_args(request_body, request_headers):
     resolver_string = ""
 
     if resolver_group != 'None':
-        resolver_string = f"Also add this in response like For further assistent related to this reach out to {resolver_group}"
+        resolver_string = f"""Always add this in response, "If the above information does not resolve your issue, please feel free to reach out for further assistance at {resolver_group}" at end"""
     
     if request_messages[-1]['role'] == 'user' and answer is not None:
         request_messages[-1]['content'] = f"""**query:** \n {query} \n\n\n **Answer from RAG:**\n {answer}"""
@@ -265,9 +265,9 @@ async def prepare_model_args(request_body, request_headers):
     if actual_citations != []:
         system_prompt = f"""
 **Instruction for Generating and Formatting the Response**   
-1. Answer the user query from **Answer from RAG**, use only **Answer from RAG** without referencing other sources or prior knowledge.  
-2. If Answer is not available in **Answer from RAG**,  just reply stating, 'There is no answer available'.
-3. Write answer in step by step format. 
+1. **Answer from RAG** is a correct answer to unser's query, therefore in response just use re-write **Answer from RAG** without referencing other sources or prior knowledge.  
+2. Re-Write **Answer from RAG** in step by step format.
+3. if **Answer from RAG** contains this "the context provided does not provided the specific detais", "There is no answer available" or similar then do not re-write **Answer from RAG**, Just state There isn't an available answer at the moment, but I've included a few articles in the citations that may be helpful or something similar in step by step format 
 
 {resolver_string}
 """
@@ -348,11 +348,10 @@ async def send_chat_request(request_body, request_headers):
         azure_openai_client = await init_openai_client()
         raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
         response = raw_response.parse()
-        # apim_request_id = raw_response.headers.get("apim-request-id") 
+        apim_request_id = raw_response.headers.get("apim-request-id") 
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e
-
     return response, apim_request_id
 
 async def stream_chat_request(request_body, request_headers):
