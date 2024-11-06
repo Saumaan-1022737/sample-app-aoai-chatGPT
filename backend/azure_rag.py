@@ -238,7 +238,7 @@ INSTRUCTIONS:
     - For transcript, use: [timestamp, documents number]. for example [["00:11:00", "1"], ["00:1:44", "2"]]
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
-6. If the answer or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
+6. Drive answer from the given context, If the answer or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
