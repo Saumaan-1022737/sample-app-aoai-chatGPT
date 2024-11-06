@@ -201,7 +201,7 @@ class AzureSearchPromptService:
         # Build the final context list with a maximum of 5 entries
         context = []
         for answer, ctx in contexts_map:
-            if answer.upper() == "YES" and len(context) < 7:
+            if answer.upper() == "YES" and len(context) < 5:
                 context.append(ctx)
 
         return context
@@ -233,10 +233,10 @@ INSTRUCTIONS:
 3. Give answer in step by step format.
 4. Keep your answer concise and solely on the information given in the Context.
 5. Always provide the answer with all relevant citations only when the answer is complete, ensuring that each citation includes the corresponding timestamp and document number used to generate the response. Provide the citation in the following format only at the end of the whole answer not in between the answer.
-    - For transcript, use: [timestamp, documents number]. for example [["00:11:00", "1"], ["00:1:44", "2"]]
-    - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
+    - For transcript, use: [timestamp, documents number] for example [["00:11:00", "1"], ["00:1:44", "2"]] or [["00:01:05", "4"]]
+    - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]] or ["", "7"]
     - For chit-chat query citation will be empty [[]]
-6. If the answer to the user's query or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
+6. If the answer  or partial answer to the user's query or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
