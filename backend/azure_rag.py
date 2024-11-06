@@ -152,7 +152,7 @@ class AzureSearchPromptService:
         inst_client = instructor.from_openai(await init_openai_client())
 
         response = await inst_client.chat.completions.create(
-                model="ssagpt4omini",
+                model="ssagpt4o",
                 response_model=SinglePrediction,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
