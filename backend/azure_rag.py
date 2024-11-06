@@ -12,7 +12,10 @@ from backend.security.ms_defender_utils import get_msdefender_user_json
 import json
 import logging
 import base64 
-import re 
+import re
+import instructor
+import enum
+import asyncio
 # import asyncio
 # from dotenv import load_dotenv
 # load_dotenv()
@@ -23,10 +26,17 @@ class AnswerCitation(BaseModel):
     """ 
     Citations and Answer
     """ 
-    citation: List[List[str]] = Field(description="Always include all the citations. in case of no answer citation=[[]] ")
+    citation: List[List[str]] = Field([[]], description="Always include all the citations. in case of no answer citation=[[]] ")
     
     answer: str = Field(description="Only include Answer, do not include any citations in this. In case of no answer, answer = 'There is no answer available'") 
   
+class Labels(str, enum.Enum):
+    YES = "Yes"
+    NO = "No"
+    
+class SinglePrediction(BaseModel):
+    class_label: Labels
+
 class AzureSearchPromptService:  
     def __init__(self):  
         self.service_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")  
@@ -45,7 +55,7 @@ class AzureSearchPromptService:
         vector = await self.generate_embeddings(query, self.embedding_model)  
         return VectorizedQuery(vector=vector, k_nearest_neighbors=3, fields="text_vector")  
   
-    async def search(self, query: str, top: int = 12, rag_filter_query = None) -> List[Any]:  
+    async def search(self, query: str, top: int = 3, rag_filter_query = None) -> List[Any]:  
         vector_filter_mode = None
         if rag_filter_query is not None:
             vector_filter_mode="preFilter"
@@ -55,12 +65,12 @@ class AzureSearchPromptService:
                 search_text=query,  
                 vector_queries=[vector_query],  
                 select=["title", "chunk", "url_metadata", "file_name_metadata", "type"],  #todo
-                query_type=QueryType.SEMANTIC,
+                # query_type=QueryType.SEMANTIC,
                 vector_filter_mode=vector_filter_mode,
                 filter=rag_filter_query,
                 semantic_configuration_name="semantic",  
-                query_caption=QueryCaptionType.EXTRACTIVE,  
-                query_answer=QueryAnswerType.EXTRACTIVE,  
+                # query_caption=QueryCaptionType.EXTRACTIVE,  
+                # query_answer=QueryAnswerType.EXTRACTIVE,  
                 top=top  
             )
 
@@ -94,15 +104,80 @@ class AzureSearchPromptService:
         priority_order = ['video', 'wiki', 'email','error', 'creo_parametric', 'creo_view'] 
         contexts = sorted(contexts, key=lambda x: priority_order.index(x['type']))
         return contexts
+    
+    async def check_answer(self,query, context):
+        system_prompt = f"""
+ **Task:** You will be provided with a small chunk of document or transcript.
+  **Objective:** Determine if the given query, can be answered using the chunk of document.
+  **Instructions:**
+  1. **Strict Evaluation:** Review the chunk of document carefully. Assess whether the information within it directly addresses the query.
+  2. **Binary Response:**
+    - Respond with **"Yes"** if the chunk of document contains sufficient information to answer the query.
+    - Respond with **"No"** if the chunk of document does not contain sufficient information to answer the query or any part of it.
+  3. **No Further Explanation:** Provide only the binary response ("Yes" or "No"). Do not include any additional explanation, reasoning, or details.
+  
+  
+  **query**: {query}
+
+  
+  **Chunk of document**:\n\n{context}
+"""
+        inst_client = instructor.from_openai(await init_openai_client())
+
+        response = await inst_client.chat.completions.create(
+                model="ssagpt4omini",
+                response_model=SinglePrediction,
+                messages=[{"role": "system", "content": system_prompt}],
+                temperature=0.0
+            )
+        
+        return response.class_label.name
+
+    
+    async def run_parallel_searches(self, query):  
+        tasks = [  
+            self.search(query, 3, self.get_filter_query("video")),  
+            self.search(query, 3, self.get_filter_query("wiki")),  
+            self.search(query, 2, self.get_filter_query("error")),  
+            self.search(query, 2, self.get_filter_query("creo_view")),  
+            self.search(query, 2, self.get_filter_query("creo_parametric")),  
+        ]
+        contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+
+        tasks_2 = [  
+            self.check_answer(query, contexts_video),  
+            self.check_answer(query, contexts_wiki),  
+            self.check_answer(query, contexts_error),  
+            self.check_answer(query, contexts_creo_view),  
+            self.check_answer(query, contexts_creo_parametric),  
+        ]
+
+        ans_video, ans_wiki, ans_error, ans_creo_view, ans_creo_parametric = await asyncio.gather(*tasks_2)
+
+        context = []
+        if ans_video.upper() == "YES":
+            context = context + contexts_video
+        elif ans_wiki.upper() == "YES":
+            context = context + contexts_wiki
+        elif ans_error.upper() == "YES":
+            context = context + contexts_error
+        elif ans_creo_view.upper() == "YES":
+            context = context + contexts_creo_view
+        elif ans_creo_parametric.upper() == "YES":
+            context = context + contexts_creo_parametric
+        else:
+            context = []
+        
+
+        return context
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
 
         if rag_filter == 'error': 
-            contexts = await self.search(query, top, self.get_filter_query(rag_filter))
+            contexts = await self.search(query, 3, self.get_filter_query(rag_filter))
         else:
-            contexts = await self.search(query, 5, None)
-            print("contexts:\n", contexts)
-            contexts = self.context_filtering(contexts)
+            contexts = await self.run_parallel_searches(query)
+            # print("contexts:\n", contexts)
 
         context_str = "\n\n".join(  
             f"**documents: {i+1}**\n{context['chunk']}" for i, context in enumerate(contexts)  
@@ -127,8 +202,7 @@ INSTRUCTIONS:
     - For transcript, use: [timestamp, documents number]. for example [["00:11:00", "1"], ["00:1:44", "2"]]
     - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]]
     - For chit-chat query citation will be empty [[]]
-7. Do not create or derive your own answer. If the answer is not directly available in the context, just reply stating, 'There is no answer available'
-8. Points to remember: The first document has the highest priority, with priority decreasing from the first to the last. Therefore, the last document has the lowest priority. If the higher-priority documents contain the complete answers, ignore the lower-priority ones while answering and in citation.
+6. Do not create or derive your own answer. If the answer is not directly available in the context, just reply stating, 'There is no answer available'
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
@@ -136,30 +210,18 @@ INSTRUCTIONS:
 
         return contexts, messages 
   
-    async def openai_with_retry(self, messages, tools, user_json, max_retries=3):  
-        retries = 0  
-        while retries < max_retries:    
-            azure_openai_client = await init_openai_client()  
-            raw_rag_response = await azure_openai_client.chat.completions.with_raw_response.create(  
-                model=self.chat_model,  
-                messages=messages,  
-                tools=tools,  
-                temperature=0,  
-                user=user_json  
-            )  
-            rag_response = raw_rag_response.parse()  
-            apim_request_id = raw_rag_response.headers.get("apim-request-id")
-            try:  
-                structure_response = json.loads(rag_response.choices[0].message.tool_calls[0].function.arguments)
-                answer = structure_response['answer']
-                citations = structure_response['citation']
-
-                return answer,citations, apim_request_id 
-            except Exception as e:  
-                retries += 1  
-                print(f"Attempt {retries} failed: {e}")  
-                if retries >= max_retries:  
-                    return rag_response.choices[0].message.content, [], apim_request_id
+    async def openai_with_retry(self, messages, tools, user_json, max_retries=3):
+          
+        inst_client = instructor.from_openai(await init_openai_client())
+        response = await inst_client.chat.completions.create(
+                model="ssagpt4o",
+                response_model=AnswerCitation,
+                messages=messages,
+                temperature=0.05
+            )
+        return response.answer,  response.citation, None
+    # answer, citations, apim_request_id
+        
     
     @staticmethod
     def validate_and_convert(input_list, top=10):

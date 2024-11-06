@@ -12,7 +12,11 @@ class ClassPrediction(BaseModel):
         description="Assign user's query to an resolver group",
     )
 
-system_prompt = f"""
+
+
+
+async def find_resolver_group(query):
+    system_prompt = f"""
 You are an expert AI assistant specializing in assing user's query to a resolver group.
 
 **Your Task:** Assign to one of the following resolver group.
@@ -149,10 +153,6 @@ To assist you with your classification task, here are the simplified and concise
 
 These concise definitions should make it easier for you to assign user's query to the correct resolver groups during your classification task. Match each user issue with the key responsibilities listed to determine the appropriate resolver group.
 """
-
-
-
-async def find_resolver_group(query):
     inst_client = instructor.from_openai(await init_openai_client())
     
     response = await inst_client.chat.completions.create(
