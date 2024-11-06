@@ -16,6 +16,7 @@ import re
 import instructor
 import enum
 import asyncio
+import ast
 # import asyncio
 # from dotenv import load_dotenv
 # load_dotenv()
@@ -196,7 +197,6 @@ class AzureSearchPromptService:
             ("YES" if res else "NO", ctx) for res, ctx in zip(results, contexts_video[:2] + contexts_wiki[:2] + contexts_error + contexts_creo_view + contexts_creo_parametric)
         ]
 
-        print("contexts_map", contexts_map)
 
         # Build the final context list with a maximum of 5 entries
         context = []
@@ -204,7 +204,6 @@ class AzureSearchPromptService:
             if answer.upper() == "YES" and len(context) < 7:
                 context.append(ctx)
 
-        # print(context)
         return context
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
@@ -213,7 +212,6 @@ class AzureSearchPromptService:
             contexts = await self.search(query, 3, self.get_filter_query(rag_filter))
         else:
             contexts = await self.run_parallel_searches(query)
-            # print("contexts:\n", contexts)
 
         context_str = "\n\n".join(  
             f"""**documents: "{i+1}"**\n{context['chunk']}""" for i, context in enumerate(contexts)  
@@ -244,8 +242,35 @@ INSTRUCTIONS:
                       {"role": "user", "content": rag_user_query}]
         
 
-        return contexts, messages 
-  
+        return contexts, messages
+    
+
+
+    def extract_list_from_string(self, s):
+        """
+        Extracts a list from a given string.
+
+        Parameters:
+            s (str): The input string containing a list.
+
+        Returns:
+            list or None: The extracted list if found, otherwise None.
+        """
+        # Use regular expression to find the list inside the string
+        match = re.search(r'(\[\[.*?\]\])', s)
+        if match:
+            list_str = match.group(1)
+            try:
+                # Safely evaluate the string to a Python list
+                list_data = ast.literal_eval(list_str)
+                return list_data
+            except (SyntaxError, ValueError):
+                # Handle cases where the extracted string is not a valid list
+                print("Found list pattern but couldn't parse it.")
+                return None
+        else:
+            return None  # No list found in the string
+    
     async def openai_with_retry(self, messages, tools, user_json, max_retries=1):  
         retries = 0  
         while retries < max_retries:    
@@ -266,14 +291,20 @@ INSTRUCTIONS:
                 answer = structure_response['answer']
                 citations = structure_response['citation']
                 citations = self.convert_list_format(citations)
-                # print(citations)
 
                 return answer,citations, apim_request_id 
-            except Exception as e:  
-                retries += 1  
-                print(f"Attempt {retries} failed: {e}")  
-                if retries >= max_retries:  
-                    return rag_response.choices[0].message.content, [], apim_request_id
+            except Exception as e:
+                try:
+                    rag_str_response = rag_response.choices[0].message.content
+                    answer = rag_str_response.split("\nCitations")[0].split("\nCitation")[0]
+                    citations = self.extract_list_from_string(rag_str_response)
+                    citations = self.convert_list_format(citations)
+                    return answer, citations, apim_request_id 
+                except Exception as e2:
+                    retries += 1  
+                    print(f"Attempt {retries} failed: {e}")  
+                    if retries >= max_retries:  
+                        return rag_response.choices[0].message.content, [], apim_request_id
     
     @staticmethod
     def validate_and_convert(input_list, top=10):
@@ -525,13 +556,15 @@ INSTRUCTIONS:
         contexts, messages = await self.get_prompt_message(query, top, rag_filter)
         tools = [openai.pydantic_function_tool(AnswerCitation)]
         answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
-        # top = len(citations)
-        actual_citations = self.get_actual_citations(citations, contexts, 10)
+        print("citation", citations)
+        actual_citations = self.get_actual_citations(citations, contexts, len(citations)+1)
         if actual_citations == [] and citations != [[]]:
             for i in range(len(citations)):
                 if citations[i][0] != "":
                     citations[i][0] = self.correct_time_string(citations[i][0])
-        actual_citations = self.get_actual_citations(citations, contexts, 10)
+            actual_citations = self.get_actual_citations(citations, contexts, 10)
+            print("correction_citation", citations)
+        
 
         return actual_citations, answer, apim_request_id, user_json
 
