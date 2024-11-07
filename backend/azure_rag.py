@@ -69,23 +69,24 @@ class AzureSearchPromptService:
         vector_filter_mode = None
         if rag_filter_query is not None:
             vector_filter_mode="preFilter"
-        async with SearchClient(self.service_endpoint, self.wiki_index, DefaultAzureCredential()) as search_client:
-            vector_query = await self.generate_vector_query(query)  
-            contexts = await search_client.search(  
-                search_text=query,  
-                vector_queries=[vector_query],  
-                select=["title", "chunk", "url_metadata", "file_name_metadata", "type"],  #todo
-                # query_type=QueryType.SEMANTIC,
-                vector_filter_mode=vector_filter_mode,
-                filter=rag_filter_query,
-                semantic_configuration_name="semantic",  
-                # query_caption=QueryCaptionType.EXTRACTIVE,  
-                # query_answer=QueryAnswerType.EXTRACTIVE,  
-                top=top  
-            )
+        async with DefaultAzureCredential() as credential:
+            async with SearchClient(self.service_endpoint, self.wiki_index, credential) as search_client:
+                vector_query = await self.generate_vector_query(query)  
+                contexts = await search_client.search(  
+                    search_text=query,  
+                    vector_queries=[vector_query],  
+                    select=["title", "chunk", "url_metadata", "file_name_metadata", "type"],  #todo
+                    # query_type=QueryType.SEMANTIC,
+                    vector_filter_mode=vector_filter_mode,
+                    filter=rag_filter_query,
+                    semantic_configuration_name="semantic",  
+                    # query_caption=QueryCaptionType.EXTRACTIVE,  
+                    # query_answer=QueryAnswerType.EXTRACTIVE,  
+                    top=top  
+                )
 
-            return [context async for context in contexts]  
-        
+                return [context async for context in contexts]  
+            
     @staticmethod
     def get_filter_query(rag_filter):
         return f"type eq '{rag_filter}'"
@@ -233,7 +234,7 @@ citations: ...\
         return source_name
     
     async def run_parallel_searches(self, query, rag_filter=None):
-        combined_answer = ""
+        combined_answer = []
         citations = []
         context = []
         if rag_filter is None:
@@ -267,7 +268,7 @@ citations: ...\
                 if rest[-1]:
                     n = len(context)
                     source_name = self.ger_source_name(ctx)
-                    combined_answer = combined_answer + f"\n\nAnswer from source:{source_name} {rest[0]}"
+                    combined_answer.append(f"\n\nAnswer from source: **{source_name}**\n{rest[0]}")
                     context.append(ctx)
                     if i < len(contexts_video):
                         for ts in rest[1]:
@@ -290,7 +291,7 @@ citations: ...\
             for i, (rest, ctx) in enumerate(zip(results, contexts)):
                 if rest[-1]:
                     n = len(context)
-                    combined_answer = combined_answer + f"\n\nAnswer from source:{n+1} {rest[0]}"
+                    combined_answer.append(f"\n\nAnswer from source:{n+1} {rest[0]}")
                     context.append(ctx)
                     citations.append(["", f"{n+1}"])
             
@@ -309,7 +310,7 @@ citations: ...\
         #         context.append(ctx)
 
         if len(context) < 1:
-            combined_answer = "There is no answer available from the source"
+            combined_answer = ["There is no answer available from the source"]
 
         return combined_answer, citations, context
 
@@ -320,15 +321,21 @@ citations: ...\
         # else:
         combined_answer, citations, contexts = await self.run_parallel_searches(query, rag_filter)
 
-        print(combined_answer)
+        if len(contexts) > 3:
+            combined_answer = combined_answer[:3]
+            contexts = contexts[:3]
+            citations = [sublist for sublist in citations if int(sublist[1]) <= 3]
+        
 
-        # context_str = "\n\n".join(  
-        #     f"""**documents: "{i+1}"**\n{context['chunk']}""" for i, context in enumerate(contexts)  
-        # )
+        combined_answer_str = "\n".join(  
+            f"""{answer_}""" for i, answer_ in enumerate(combined_answer)  
+        )
+
+        print(combined_answer_str)
         rag_user_query = f"""
 Answer's from the different source.
 ------------------------------------------
-{combined_answer}
+{combined_answer_str}
 ------------------------------------------
 
 
@@ -345,7 +352,7 @@ Answer's from the different source.
    - **Creo Parametric**
    - **Creo View** (lowest priority)
 
-2. **Adhere strictly to the priority order** when crafting the final answer. If answers are available in the highest-priority sources, consider only the top two in this hierarchy. If a source lacks relevant information, proceed to the next available source in the order.
+2. **Adhere strictly to the priority order** when crafting the final answer.
 
 3. **Fallback Condition**: If none of the sources provide an answer, respond based on general knowledge, clarifying that no information was found in the provided sources.
 

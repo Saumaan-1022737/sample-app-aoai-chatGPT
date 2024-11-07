@@ -5,7 +5,7 @@ import uuid
 import asyncio
 from quart import (Blueprint, Quart, jsonify, make_response, request, send_from_directory, flash, 
                    render_template, current_app, redirect, session, url_for,)
-from azure.identity.aio import (DefaultAzureCredential)
+from azure.identity.aio import DefaultAzureCredential
 from backend.auth.auth_utils import get_authenticated_user_details
 from backend.history.cosmosdbservice import CosmosConversationClient
 from backend.utils import format_as_ndjson, format_stream_response
@@ -254,9 +254,10 @@ async def prepare_model_args(request_body, request_headers):
                                                             rag_filter= rag_filter)
     
     resolver_group = await find_resolver_group(query)
+    resolver_list = ["pdmlink_admin@microsoft.com", "creo_help@microsoft.com", "surfswlic@microsoft.com", "deviceshelp@microsoft.com", "destasreredmond@microsoft.com"]
     resolver_string = ""
 
-    if resolver_group != 'None':
+    if resolver_group != 'None' and not any(resolver in answer.lower() for resolver in resolver_list):
         resolver_string = f"""Always add this in response, "If the above information does not resolve your issue, please feel free to reach out for further assistance at {resolver_group}" at end"""
     
     if request_messages[-1]['role'] == 'user' and answer is not None:
