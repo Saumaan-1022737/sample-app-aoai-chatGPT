@@ -277,13 +277,14 @@ citations: ...\
                         citations.append(["", f"{n+1}"])
         else:
             tasks = [    
-                self.search(query, 3, self.get_filter_query(rag_filter)),    
-            ]
-            contexts = await asyncio.gather(*tasks)
-            tasks_2 = [  
-                self.answer_document(query, contexts[0]),
-                self.answer_document(query, contexts[1]),
-                self.answer_document(query, contexts[2]),
+                self.search(query, 3, self.get_filter_query(rag_filter)),
+                self.search(query, 3, self.get_filter_query("video")),
+                ]
+            contexts, _ = await asyncio.gather(*tasks)
+            tasks_2 = [
+                self.answer_document(query, contexts[0]) if len(contexts) > 0 else None,
+                self.answer_document(query, contexts[1]) if len(contexts) > 1 else None,
+                self.answer_document(query, contexts[2]) if len(contexts) > 2 else None,
             ]
 
             results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
@@ -291,7 +292,7 @@ citations: ...\
             for i, (rest, ctx) in enumerate(zip(results, contexts)):
                 if rest[-1]:
                     n = len(context)
-                    combined_answer.append(f"\n\nAnswer from source:{n+1} {rest[0]}")
+                    combined_answer.append(f"\n\nAnswer from source:{rag_filter} {rest[0]}")
                     context.append(ctx)
                     citations.append(["", f"{n+1}"])
             
