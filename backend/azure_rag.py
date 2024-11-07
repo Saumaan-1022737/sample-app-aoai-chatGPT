@@ -4,7 +4,7 @@ from backend.openai_client import init_openai_client
 from azure.identity.aio import DefaultAzureCredential  
 from azure.search.documents.aio import SearchClient  
 from azure.search.documents.models import QueryType, VectorizedQuery, QueryAnswerType, QueryCaptionType  
-from typing import List, Any
+from typing import List, Any, Optional, Literal
 from pydantic import BaseModel, Field
 import openai
 from backend.auth.auth_utils import get_authenticated_user_details
@@ -23,13 +23,22 @@ import ast
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-class AnswerCitation(BaseModel):
-    """ 
-    Citations and Answer
-    """ 
-    citation: List[List[str]] = Field(description="Always include all the citations. in case of no answer citation=[[]] ")
-    
-    answer: str = Field(description="Only include Answer, do not include any citations in this.") 
+class DocAnswer(BaseModel):
+    answer: str = Field(description="Answer to the user's query")
+    class_labels: Literal["YES", "NO"] = Field(  # noqa: F821
+        ...,
+        description="classify if the query, can be answered using the given Context",
+    )
+
+class TranscriptAnswer(BaseModel):
+    answer: str = Field(description="Answer to the user's query")
+    class_labels: Literal["YES", "NO"] = Field(  # noqa: F821
+        ...,
+        description="classify if the query, can be answered using the given Context",
+    )
+    citations: Optional[List[str]] = Field([], description="Citations from the answer in form on timestamps HH:MM:SS")
+
+
   
 class Labels(str, enum.Enum):
     YES = "Yes"
@@ -132,94 +141,194 @@ class AzureSearchPromptService:
                 new_list.append(sublist)
         return new_list
     
-    async def check_answer(self,query, context):
+    async def answer_document(self,query, context):
         context_str = context['chunk']
         system_prompt = f"""
- **Task:** You will be provided with a small chunk of document or transcript.
-  **Objective:** Determine if the given query, can be answered using the chunk of document.
-  **Instructions:**
-  1. **Strict Evaluation:** Review the chunk of document carefully. Assess whether the information within it directly addresses the query.
-  2. **Binary Response:**
-    - Respond with **"Yes"** if the chunk of document contains sufficient information to answer the query.
-    - Respond with **"No"** if the chunk of document does not contain sufficient information to answer the query.
-  3. **No Further Explanation:** Provide only the binary response ("Yes" or "No"). Do not include any additional explanation, reasoning, or details.
-  
+Context information is below.
+---------------------
+{context_str}
+---------------------
 
-  **query**: {query}
+You are an expert AI assistant specializing in answering the query and classifying it based on above contex.
 
-  
-  **Chunk of document**:\n\n{context_str}
+**Your Task:**
+1. Given the above context information and not prior knowledge answer the query in step by step format.
+2. Keep your answer concise and solely on the information given in the Context.
+3. classify if the query, can be answered using the given Context.
+ - "YES": if the given Context contains sufficient information to answer the query
+ - "NO": if the given Context does not contains sufficient information to answer the query
+
+Query: {query}
+
+Answer: \
 """
         inst_client = instructor.from_openai(await init_openai_client())
 
         response = await inst_client.chat.completions.create(
                 model="ssagpt4o",
-                response_model=SinglePrediction,
+                response_model=DocAnswer,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
             )
         
-        if response.class_label.name.upper() == "NO":
-            return None
+        if response.class_labels.upper() == "NO":
+            return [response.answer, None]
         
-        return response.class_label.name
+        return [response.answer, "YES"]
 
+    async def answer_video(self,query, context):
+        context_str = context['chunk']
+        system_prompt = f"""
+Context information is below.
+---------------------
+{context_str}
+---------------------
+
+Note: Context is a transcript, with timestamps in the format HH:MM:SS on each line above the text.
+
+You are an expert AI assistant specializing in answering the query with citation and classifying it based on above context.
+
+**Your Task:**
+1. Given the above context information and not prior knowledge answer the query in step by step format.
+2. Keep your answer concise and solely on the information given in the Context.
+3. classify if the query, can be answered using the given Context.
+ - "YES": if the given Context contains sufficient information to answer the query.
+ - "NO": if the given Context does not contains sufficient information to answer the query.
+4. Always provide all relevant citations at end of the answer, ensuring that the citations are in fomat of List where each elemnt is a timestamp in HH:MM:SS format. e.g, ["00:11:05", "70:02:05"] or ["01:14:12"].
+
+Query: {query}
+
+Answer: ...\
+
+citations: ...\
+"""
+        inst_client = instructor.from_openai(await init_openai_client())
+
+        response = await inst_client.chat.completions.create(
+                model="ssagpt4o",
+                response_model=TranscriptAnswer,
+                messages=[{"role": "system", "content": system_prompt}],
+                temperature=0.05
+            )
+        
+        if response.class_labels.upper() == "NO":
+            return [response.answer, [], None]
+        
+        return [response.answer, response.citations, "YES"]
     
-    async def run_parallel_searches(self, query):  
-        tasks = [  
-            self.search(query, 3, self.get_filter_query("video")),  
-            self.search(query, 3, self.get_filter_query("wiki")),  
-            self.search(query, 2, self.get_filter_query("error")),  
-            self.search(query, 2, self.get_filter_query("creo_view")),  
-            self.search(query, 2, self.get_filter_query("creo_parametric")),  
-        ]
-        contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
-
-        tasks_2 = [  
-            self.check_answer(query, contexts_video[0]) if len(contexts_video) > 0 else None,
-            self.check_answer(query, contexts_video[1]) if len(contexts_video) > 1 else None,
-            # self.check_answer(query, contexts_video[2]) if len(contexts_video) > 2 else None,
-            self.check_answer(query, contexts_wiki[0]) if len(contexts_wiki) > 0 else None,
-            self.check_answer(query, contexts_wiki[1]) if len(contexts_wiki) > 1 else None,
-            # self.check_answer(query, contexts_wiki[2]) if len(contexts_wiki) > 2 else None,
-            self.check_answer(query, contexts_error[0]) if len(contexts_error) > 0 else None,
-            self.check_answer(query, contexts_error[1]) if len(contexts_error) > 1 else None,
-            self.check_answer(query, contexts_creo_view[0]) if len(contexts_creo_view) > 0 else None,
-            self.check_answer(query, contexts_creo_view[1]) if len(contexts_creo_view) > 1 else None,
-            self.check_answer(query, contexts_creo_parametric[0]) if len(contexts_creo_parametric) > 0 else None,
-            self.check_answer(query, contexts_creo_parametric[1]) if len(contexts_creo_parametric) > 1 else None,
-        ]
-
-        results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
-
-        # Map results to the context responses for easy access
-        contexts_map = [
-            ("YES" if res else "NO", ctx) for res, ctx in zip(results, contexts_video[:2] + contexts_wiki[:2] + contexts_error + contexts_creo_view + contexts_creo_parametric)
-        ]
-
-
-        # Build the final context list with a maximum of 5 entries
+    def ger_source_name(self, ctx):
+        source = ctx['type']
+        if source == "error":
+            source_name = "Error"
+        elif source == "video":
+            source_name = "Video"
+        elif source == "wiki":
+            source_name = "Wiki"
+        elif source == "creo_parametric":
+            source_name = "Creo Parametric"
+        elif source == "creo_view":
+            source_name = "Creo View"
+        else:
+            source_name = source
+        return source_name
+    
+    async def run_parallel_searches(self, query, rag_filter=None):
+        combined_answer = ""
+        citations = []
         context = []
-        for answer, ctx in contexts_map:
-            if answer.upper() == "YES" and len(context) < 5:
-                context.append(ctx)
+        if rag_filter is None:
+            tasks = [  
+                self.search(query, 3, self.get_filter_query("video")),  
+                self.search(query, 3, self.get_filter_query("wiki")),  
+                self.search(query, 2, self.get_filter_query("error")),  
+                self.search(query, 2, self.get_filter_query("creo_view")),  
+                self.search(query, 2, self.get_filter_query("creo_parametric")),  
+            ]
+            contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
 
-        return context
+            tasks_2 = [  
+                self.answer_video(query, contexts_video[0]),
+                self.answer_video(query, contexts_video[1]),
+                self.answer_video(query, contexts_video[2]),
+                self.answer_document(query, contexts_wiki[0]),
+                self.answer_document(query, contexts_wiki[1]),
+                self.answer_document(query, contexts_wiki[2]),
+                self.answer_document(query, contexts_error[0]),
+                self.answer_document(query, contexts_error[1]),
+                self.answer_document(query, contexts_creo_view[0]),
+                self.answer_document(query, contexts_creo_view[1]),
+                self.answer_document(query, contexts_creo_parametric[0]),
+                self.answer_document(query, contexts_creo_parametric[1]),
+            ]
+
+            results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
+
+            for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_creo_view + contexts_creo_parametric)):
+                if rest[-1]:
+                    n = len(context)
+                    source_name = self.ger_source_name(ctx)
+                    combined_answer = combined_answer + f"\n\nAnswer from source:{source_name} {rest[0]}"
+                    context.append(ctx)
+                    if i < len(contexts_video):
+                        for ts in rest[1]:
+                            citations.append([ts, f"{n+1}"])
+                    else:
+                        citations.append(["", f"{n+1}"])
+        else:
+            tasks = [    
+                self.search(query, 3, self.get_filter_query(rag_filter)),    
+            ]
+            contexts = await asyncio.gather(*tasks)
+            tasks_2 = [  
+                self.answer_document(query, contexts[0]),
+                self.answer_document(query, contexts[1]),
+                self.answer_document(query, contexts[2]),
+            ]
+
+            results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
+
+            for i, (rest, ctx) in enumerate(zip(results, contexts)):
+                if rest[-1]:
+                    n = len(context)
+                    combined_answer = combined_answer + f"\n\nAnswer from source:{n+1} {rest[0]}"
+                    context.append(ctx)
+                    citations.append(["", f"{n+1}"])
+            
+
+
+        # # Map results to the context responses for easy access
+        # contexts_map = [
+        #     ("YES" if res else "NO", ctx) for res, ctx in zip(results, contexts_video[:2] + contexts_wiki[:2] + contexts_error + contexts_creo_view + contexts_creo_parametric)
+        # ]
+
+
+        # # Build the final context list with a maximum of 5 entries
+        # context = []
+        # for answer, ctx in contexts_map:
+        #     if answer.upper() == "YES" and len(context) < 5:
+        #         context.append(ctx)
+
+        if len(context) < 1:
+            combined_answer = "There is no answer available from the source"
+
+        return combined_answer, citations, context
 
     async def get_prompt_message(self, query: str, top: int = 3, rag_filter = None) -> (List[Any], str):
 
-        if rag_filter == 'error': 
-            contexts = await self.search(query, 3, self.get_filter_query(rag_filter))
-        else:
-            contexts = await self.run_parallel_searches(query)
+        # if rag_filter == 'error': 
+        #     contexts = await self.search(query, 3, self.get_filter_query(rag_filter))
+        # else:
+        combined_answer, citations, contexts = await self.run_parallel_searches(query, rag_filter)
 
-        context_str = "\n\n".join(  
-            f"""**documents: "{i+1}"**\n{context['chunk']}""" for i, context in enumerate(contexts)  
-        )
+        print(combined_answer)
+
+        # context_str = "\n\n".join(  
+        #     f"""**documents: "{i+1}"**\n{context['chunk']}""" for i, context in enumerate(contexts)  
+        # )
         rag_user_query = f"""
-Context information is below.
+Answer's from the different source.
 ------------------------------------------
-{context_str}
+{combined_answer}
 ------------------------------------------
 
 
@@ -227,22 +336,26 @@ Context information is below.
 {query}
 """ 
         rag_system_prompt = """
-INSTRUCTIONS:
-1. You are an assistant who helps users answer their queries.
-2. Always Answer the user's query from the Context. The user will provide context in the form of multiple documents, each identified by a document number. If a document is a transcript, it will also include timestamps in the format HH:MM:SS on each line above the text.
-3. Give answer in step by step format.
-4. Keep your answer concise and solely on the information given in the Context.
-5. Always provide the answer with all relevant citations only when the answer is complete, ensuring that each citation includes the corresponding timestamp and document number used to generate the response. Provide the citation in the following format only at the end of the whole answer not in between the answer.
-    - For transcript, use: [timestamp, documents number] for example [["00:11:00", "1"], ["00:1:44", "2"]] or [["00:01:05", "4"]]
-    - For non transcript, use: ["", documents number]. for example [["", "3"],["", "1"], ["", "2"]] or ["", "7"]
-    - For chit-chat query citation will be empty [[]]
-6. If the answer to the user's query or any part of it is not available in the given context, then the answer will be 'There is no answer available' and the citation will be empty 'citation: [[]]'.
+**Task:** Generate a comprehensive answer by synthesizing responses from all available sources.
+
+1. **Process each source individually** following the specified **priority order**:
+   - **Video** (highest priority)
+   - **Wiki**
+   - **Error Documentation**
+   - **Creo Parametric**
+   - **Creo View** (lowest priority)
+
+2. **Adhere strictly to the priority order** when crafting the final answer. If answers are available in the highest-priority sources, consider only the top two in this hierarchy. If a source lacks relevant information, proceed to the next available source in the order.
+
+3. **Fallback Condition**: If none of the sources provide an answer, respond based on general knowledge, clarifying that no information was found in the provided sources.
+
+4. Do not mentioned any sources name in the final answer.
 """
         messages = [{"role": "system", "content": rag_system_prompt},  
                       {"role": "user", "content": rag_user_query}]
         
 
-        return contexts, messages
+        return contexts, messages, citations
     
 
 
@@ -348,7 +461,7 @@ INSTRUCTIONS:
         # Safely evaluate the processed list string
         return ast.literal_eval(processed_list_str)
     
-    async def openai_with_retry(self, messages, tools, user_json, max_retries=2):  
+    async def openai_with_retry(self, messages, tools, user_json, max_retries=1):  
         retries = 0  
         while retries < max_retries:    
             azure_openai_client = await init_openai_client()  
@@ -356,39 +469,22 @@ INSTRUCTIONS:
                 model=self.chat_model,  
                 messages=messages,  
                 tools=tools,  
-                temperature=0.1,  
+                temperature=0.05,  
                 user=user_json  
             )  
             rag_response = raw_rag_response.parse()  
             apim_request_id = raw_rag_response.headers.get("apim-request-id")
-            print("rag_response.choices[0]",rag_response.choices[0])
 
-            try:  
-                structure_response = json.loads(rag_response.choices[0].message.tool_calls[0].function.arguments)
-                answer = structure_response['answer']
-                citations = structure_response['citation']
-                citations = self.convert_list_format(citations)
-
-                return answer,citations, apim_request_id 
+            try:
+                answer = rag_response.choices[0].message.content
+                # print("rag_str_response", rag_str_response)
+                return answer, apim_request_id 
             except Exception as e:
-                try:
-                    rag_str_response = rag_response.choices[0].message.content
-                    # print("rag_str_response", rag_str_response)
-                    
-                    citations, answer = self.extract_and_remove_lists(rag_str_response)
-                    answer = answer.split("\nCitations")[0].split("\nCitation")[0]
+                retries += 1  
+                print(f"Attempt {retries} failed: {e}")  
+                if retries >= max_retries:  
+                    return rag_response.choices[0].message.content, apim_request_id
 
-                    if citations == [[]]:
-                        raise ValueError("An error occurred because of invalid input") 
-                    
-                    citations = self.convert_list_format(citations) 
-                    return answer, citations, apim_request_id 
-                except Exception as e2:
-                    retries += 1  
-                    print(f"Attempt {retries} failed: {e}")  
-                    if retries >= max_retries:  
-                        return rag_response.choices[0].message.content, [], apim_request_id
-    
     @staticmethod
     def validate_and_convert(input_list, top=10):
         try:  
@@ -636,9 +732,9 @@ INSTRUCTIONS:
                 conversation_id = request_body.get("conversation_id", None)        
                 user_json = get_msdefender_user_json(authenticated_user_details, request_headers, conversation_id)
 
-        contexts, messages = await self.get_prompt_message(query, top, rag_filter)
-        tools = [openai.pydantic_function_tool(AnswerCitation)]
-        answer, citations, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
+        contexts, messages, citations = await self.get_prompt_message(query, top, rag_filter)
+        tools = None# tools = [openai.pydantic_function_tool(AnswerCitation)]
+        answer, apim_request_id = await self.openai_with_retry(messages, tools, user_json, max_retries=3)
         print("citation", citations)
         actual_citations = self.get_actual_citations(citations, contexts, len(citations)+1)
         if actual_citations == [] and citations != [[]]:
