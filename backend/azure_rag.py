@@ -30,6 +30,13 @@ class DocAnswer(BaseModel):
         description="classify if the query, can be answered using the given Context",
     )
 
+class EmailAnswer(BaseModel):
+    answer: str = Field(description="Answer to the user's query")
+    class_labels: Literal["YES", "NO"] = Field(  # noqa: F821
+        ...,
+        description="classify if the query, can be answered using the given Email chain",
+    )
+
 class TranscriptAnswer(BaseModel):
     answer: str = Field(description="Answer to the user's query")
     class_labels: Literal["YES", "NO"] = Field(  # noqa: F821
@@ -157,7 +164,7 @@ You are an expert AI assistant specializing in answering the query and classifyi
 2. Keep your answer concise and solely on the information given in the Context.
 3. classify if the query, can be answered using the given Context.
  - "YES": if the given Context contains sufficient information to answer the query
- - "NO": if the given Context does not contains sufficient information to answer the query
+ - "NO": if the given Context does not contains sufficient information to answer the query. Class is also "NO", if query is too generic or chit-chat e.g, what do you do?, Why am I here, How are you etc.
 
 Query: {query}
 
@@ -168,6 +175,45 @@ Answer: \
         response = await inst_client.chat.completions.create(
                 model="ssagpt4o",
                 response_model=DocAnswer,
+                messages=[{"role": "system", "content": system_prompt}],
+                temperature=0.05
+            )
+        
+        if response.class_labels.upper() == "NO":
+            return [response.answer, None]
+        
+        return [response.answer, "YES"]
+    
+    async def answer_email(self,query, context):
+        context_str = context['chunk']
+        system_prompt = f"""
+Context information is below.
+---------------------
+{context_str}
+---------------------
+
+Note: Context is a email chain that is a discussion between multiple participants.
+
+
+You are an expert AI assistant specializing in answering the query and classifying it based on above contex.
+
+**Your Task:**
+1. Given the above context information and not prior knowledge answer the query in step by step format. 
+2. Keep your answer concise and solely on the information given in the Context.
+3. classify if the query, can be answered using the given Context (email chain).
+ - "YES": if the given Context contains sufficient information to answer the query
+ - "NO": if the given Context does not contains sufficient information to answer the query. Class is also "NO", if query is too generic or chit-chat e.g, what do you do?, Why am I here, How are you etc.
+4. Do not include any name from the email chain (conversation) while answering the query
+
+Query: {query}
+
+Answer: \
+"""
+        inst_client = instructor.from_openai(await init_openai_client())
+
+        response = await inst_client.chat.completions.create(
+                model="ssagpt4o",
+                response_model=EmailAnswer,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
             )
@@ -194,7 +240,7 @@ You are an expert AI assistant specializing in answering the query with citation
 2. Keep your answer concise and solely on the information given in the Context.
 3. classify if the query, can be answered using the given Context.
  - "YES": if the given Context contains sufficient information to answer the query.
- - "NO": if the given Context does not contains sufficient information to answer the query.
+ - "NO": if the given Context does not contains sufficient information to answer the query. Class is also "NO", if query is too generic or chit-chat e.g, what do you do?, Why am I here, How are you etc.
 4. Always provide all relevant citations at end of the answer, ensuring that the citations are in fomat of List where each elemnt is a timestamp in HH:MM:SS format. e.g, ["00:11:05", "70:02:05"] or ["01:14:12"].
 
 Query: {query}
@@ -217,10 +263,10 @@ citations: ...\
         
         return [response.answer, response.citations, "YES"]
     
-    def ger_source_name(self, ctx):
+    def get_source_name(self, ctx):
         source = ctx['type']
         if source == "error":
-            source_name = "Error"
+            source_name = "Error Documents"
         elif source == "video":
             source_name = "Video"
         elif source == "wiki":
@@ -229,6 +275,8 @@ citations: ...\
             source_name = "Creo Parametric"
         elif source == "creo_view":
             source_name = "Creo View"
+        elif source == "email":
+            source_name = "Email Chain"
         else:
             source_name = source
         return source_name
@@ -241,33 +289,36 @@ citations: ...\
             tasks = [  
                 self.search(query, 3, self.get_filter_query("video")),  
                 self.search(query, 3, self.get_filter_query("wiki")),  
-                self.search(query, 2, self.get_filter_query("error")),  
+                self.search(query, 2, self.get_filter_query("error")),
+                self.search(query, 2, self.get_filter_query("email")),  
                 self.search(query, 2, self.get_filter_query("creo_view")),  
                 self.search(query, 2, self.get_filter_query("creo_parametric")),  
             ]
-            contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+            contexts_video, contexts_wiki, contexts_error, contexts_email, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
 
             tasks_2 = [  
-                self.answer_video(query, contexts_video[0]),
-                self.answer_video(query, contexts_video[1]),
-                self.answer_video(query, contexts_video[2]),
-                self.answer_document(query, contexts_wiki[0]),
-                self.answer_document(query, contexts_wiki[1]),
-                self.answer_document(query, contexts_wiki[2]),
-                self.answer_document(query, contexts_error[0]),
-                self.answer_document(query, contexts_error[1]),
-                self.answer_document(query, contexts_creo_view[0]),
-                self.answer_document(query, contexts_creo_view[1]),
-                self.answer_document(query, contexts_creo_parametric[0]),
-                self.answer_document(query, contexts_creo_parametric[1]),
+                self.answer_video(query, contexts_video[0]) if len(contexts_video) > 0 else None,
+                self.answer_video(query, contexts_video[1]) if len(contexts_video) > 1 else None,
+                self.answer_video(query, contexts_video[2]) if len(contexts_video) > 2 else None,
+                self.answer_document(query, contexts_wiki[0]) if len(contexts_wiki) > 0 else None,
+                self.answer_document(query, contexts_wiki[1]) if len(contexts_wiki) > 1 else None,
+                self.answer_document(query, contexts_wiki[2]) if len(contexts_wiki) > 2 else None,
+                self.answer_document(query, contexts_error[0]) if len(contexts_error) > 0 else None,
+                self.answer_document(query, contexts_error[1]) if len(contexts_error) > 1 else None,
+                self.answer_email(query, contexts_email[0]) if len(contexts_email) > 0 else None,
+                self.answer_email(query, contexts_email[1]) if len(contexts_email) > 1 else None,
+                self.answer_document(query, contexts_creo_view[0]) if len(contexts_creo_view) > 0 else None,
+                self.answer_document(query, contexts_creo_view[1]) if len(contexts_creo_view) > 1 else None,
+                self.answer_document(query, contexts_creo_parametric[0]) if len(contexts_creo_parametric) > 0 else None,
+                self.answer_document(query, contexts_creo_parametric[1]) if len(contexts_creo_parametric) > 1 else None,
             ]
 
             results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
 
-            for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_creo_view + contexts_creo_parametric)):
+            for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_email + contexts_creo_view + contexts_creo_parametric)):
                 if rest[-1]:
                     n = len(context)
-                    source_name = self.ger_source_name(ctx)
+                    source_name = self.get_source_name(ctx)
                     combined_answer.append(f"\n\nAnswer from source: **{source_name}**\n{rest[0]}")
                     context.append(ctx)
                     if i < len(contexts_video):
@@ -278,21 +329,24 @@ citations: ...\
         else:
             tasks = [    
                 self.search(query, 3, self.get_filter_query(rag_filter)),
-                self.search(query, 3, self.get_filter_query("video")),
+                self.search(query, 2, self.get_filter_query("email")),
                 ]
-            contexts, _ = await asyncio.gather(*tasks)
+            contexts, emails = await asyncio.gather(*tasks)
             tasks_2 = [
                 self.answer_document(query, contexts[0]) if len(contexts) > 0 else None,
                 self.answer_document(query, contexts[1]) if len(contexts) > 1 else None,
                 self.answer_document(query, contexts[2]) if len(contexts) > 2 else None,
+                self.answer_email(query, emails[0]) if len(emails) > 2 else None,
+                self.answer_email(query, emails[1]) if len(emails) > 2 else None,
             ]
 
             results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
 
-            for i, (rest, ctx) in enumerate(zip(results, contexts)):
+            for i, (rest, ctx) in enumerate(zip(results, contexts + emails)):
                 if rest[-1]:
                     n = len(context)
-                    combined_answer.append(f"\n\nAnswer from source:{rag_filter} {rest[0]}")
+                    source_name = self.get_source_name(ctx)
+                    combined_answer.append(f"\n\nAnswer from source:{source_name} {rest[0]}")
                     context.append(ctx)
                     citations.append(["", f"{n+1}"])
             
@@ -349,7 +403,8 @@ Answer's from the different source.
 1. **Process each source individually** following the specified **priority order**:
    - **Video** (highest priority)
    - **Wiki**
-   - **Error Documentation**
+   - **Error Documents**
+   - **Email Chain**
    - **Creo Parametric**
    - **Creo View** (lowest priority)
 
@@ -696,6 +751,10 @@ Answer's from the different source.
                         timestamp_link = self.add_query_params(url, params)
                 else:
                     timestamp_link = url_metadata
+                    print("type_", type_)
+                    if type_ == "email":
+                        title = "Email subject: "+title
+                        timestamp_link = None
                 actual_citations.append({  
                     "FileName": title,  
                     "URL": timestamp_link,  

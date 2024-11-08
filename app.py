@@ -15,6 +15,7 @@ from backend.settings import app_settings
 from backend.azure_rag import AzureSearchPromptService
 from backend.resolver_group import find_resolver_group
 from backend.openai_image_client import has_image, image_resolver
+import asyncio
 # from dotenv import load_dotenv
 # load_dotenv()
 
@@ -26,35 +27,43 @@ async def get_blob_service_client():
     blob_service_client = BlobServiceClient(account_url, credential=credential)
     return blob_service_client, credential
 
-
-
-
 async def list_blobs_with_metadata(blob_service_client, credential, container_name):   
-    container_client = blob_service_client.get_container_client(container_name)  
-      
+    container_client = blob_service_client.get_container_client(container_name)
+    
     blob_list = []
+    tasks = []
+    # Define a semaphore to limit the number of concurrent operations
+    semaphore = asyncio.Semaphore(20)  # Adjust the value as needed
+
     async for blob in container_client.list_blobs():
-        if '/' not in blob.name: 
-            metadata_ = {'name': None,
-                        'url':None,
-                        'uploaded_by': None,
-                        'type':None}
-            blob_client = container_client.get_blob_client(blob)  
-            blob_properties = await blob_client.get_blob_properties()  
-            blob_metadata = blob_properties.metadata
-            
-            metadata_['name'] = blob.name
-            metadata_['uploaded_at'] = blob.last_modified.strftime("%d/%m/%Y %H:%M:%S")
-            if 'url_metadata' in blob_metadata:
-                metadata_['url'] = blob_metadata['url_metadata']
-            if 'uploaded_by' in blob_metadata:
-                metadata_['uploaded_by'] = blob_metadata['uploaded_by']
-            if 'type' in blob_metadata:
-                metadata_['type'] = blob_metadata['type']
-                
-            blob_list.append(metadata_)  
-      
-    return blob_list 
+        if '/' not in blob.name:
+            # Create a task for each blob
+            task = asyncio.create_task(process_blob(blob, container_client, semaphore))
+            tasks.append(task)
+    
+    # Gather results concurrently
+    blob_list = await asyncio.gather(*tasks)
+    return blob_list
+
+async def process_blob(blob, container_client, semaphore):
+    async with semaphore:
+        metadata_ = {
+            'name': blob.name,
+            'url': None,
+            'uploaded_by': None,
+            'type': None,
+            'uploaded_at': blob.last_modified.strftime("%d/%m/%Y %H:%M:%S")
+        }
+        
+        blob_client = container_client.get_blob_client(blob)
+        blob_properties = await blob_client.get_blob_properties()
+        blob_metadata = blob_properties.metadata
+
+        metadata_['url'] = blob_metadata.get('url_metadata')
+        metadata_['uploaded_by'] = blob_metadata.get('uploaded_by')
+        metadata_['type'] = blob_metadata.get('type')
+
+        return metadata_
 
 
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
@@ -267,13 +276,13 @@ async def prepare_model_args(request_body, request_headers):
         system_prompt = f"""
 **Instruction for Generating and Formatting the Response**   
 1. **Answer from RAG** is a correct answer to unser's query, therefore in response just use re-write **Answer from RAG** without referencing other sources or prior knowledge.  
-2. Re-Write **Answer from RAG** in step by step format.
+2. Re-Write **Answer from RAG** in a step-by-step format, enhancing readability and making it more engaging without altering the original content. Structure each step clearly, using bullet points or numbered steps if appropriate.
 3. if **Answer from RAG** contains this "the context provided does not provided the specific detais", "There is no answer available" or similar then do not re-write **Answer from RAG**, Just state There isn't an available answer at the moment, but I've included a few articles in the citations that may be helpful or something similar in step by step format 
 
 {resolver_string}
 """
     else:
-        system_prompt = f"""For every user query you always give this response 'There is no answer available', except Hi, hello, query about you and greeting queries
+        system_prompt = f"""For every user query you always give this response 'There is no answer available', except Hi, hello, why am I here, query about you, greeting queries or similar.
 
 Example 1:
 Query: Hi.
@@ -285,13 +294,25 @@ Your response: There is no answer available
 
 Example 3:
 Query: What do you do?
-Your response: I assist with a wide range of tasks, from answering questions and providing guidance to helping with technical issues, brainstorming ideas, and more
+Your response: I assist with a wide range of tasks, from **answering questions** and **providing guidance** to helping with **technical issues**, and more.
 
 Example 4:
 Query: My pc is running slow?
-Your response: There is no answer available
+Your response: **There is no answer available**
 
 
+Example 5:
+Query: Why am I here?
+Your response: You're here because you might need assistance with **technical** or **IT-related** questions, particularly those related to **design**, **tools**, or **troubleshooting** within your work environment. \n\nLet me know if there's something specific I can help you with!
+
+Example 6:
+
+Your response: 
+I can assist you by:
+1. **Answering Queries on Document Design and Tools**
+2. **Technical Support**
+3. **Best Practices and Workflow Guidance**
+Let me know how I can specifically help with your current project or challenge!
 
 {resolver_string}
 """
