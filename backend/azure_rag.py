@@ -203,7 +203,7 @@ You are an expert AI assistant specializing in answering the query and classifyi
 3. classify if the query, can be answered using the given Context (email chain).
  - "YES": if the given Context contains sufficient information to answer the query
  - "NO": if the given Context does not contains sufficient information to answer the query. Class is also "NO", if query is too generic or chit-chat e.g, what do you do?, Why am I here, How are you etc.
-4. Do not include any name from the email chain (conversation) while answering the query
+4. Do not include any name, PII(email,  license code, sever location, important device keys, bank details, cards etc) from the email chain (conversation) while answering the query
 
 Query: {query}
 
