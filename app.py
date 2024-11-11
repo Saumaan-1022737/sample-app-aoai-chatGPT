@@ -33,7 +33,7 @@ async def list_blobs_with_metadata(blob_service_client, credential, container_na
     blob_list = []
     tasks = []
     # Define a semaphore to limit the number of concurrent operations
-    semaphore = asyncio.Semaphore(20)  # Adjust the value as needed
+    semaphore = asyncio.Semaphore(15)  # Adjust the value as needed
 
     async for blob in container_client.list_blobs():
         if '/' not in blob.name:
