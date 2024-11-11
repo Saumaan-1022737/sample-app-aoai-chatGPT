@@ -55,6 +55,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     getData();
   }, []);
   
+  
 
 
   const [isRefAccordionOpen, { toggle: toggleIsRefAccordionOpen }] = useBoolean(false)

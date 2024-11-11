@@ -10,3 +10,4 @@ gunicorn==20.1.0
 pydantic-settings==2.2.1
 openai==1.44.1
 azure-search-documents==11.5.1
+instructor==1.4.1
