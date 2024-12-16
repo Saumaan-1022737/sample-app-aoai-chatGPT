@@ -47,8 +47,8 @@ class _UiSettings(BaseSettings):
     chat_title: str = "Start chatting"
     chat_description: str = "Got a question related CAD? I've got the answers. Let's chat!"
     favicon: str = "/favicon.ico"
-    show_share_button: bool = True
-    show_chat_history_button: bool = True
+    show_share_button: bool = False
+    show_chat_history_button: bool = False
 
 
 class _ChatHistorySettings(BaseSettings):
@@ -329,85 +329,12 @@ class _AzureSearchSettings(BaseSettings, DatasourcePayloadConstructor):
         parameters = self.model_dump(exclude_none=True, by_alias=True)
         parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
         
-        # print ("datasource:\n", {
-        #     "type": self._type,
-        #     "parameters": parameters})
         return {
             "type": self._type,
             "parameters": parameters
         }
 
-
-class _AzureCosmosDbMongoVcoreSettings(
-    BaseSettings,
-    DatasourcePayloadConstructor
-):
-    model_config = SettingsConfigDict(
-        env_prefix="AZURE_COSMOSDB_MONGO_VCORE_",
-        env_file=DOTENV_PATH,
-        extra="ignore",
-        env_ignore_empty=True
-    )
-    _type: Literal["azure_cosmosdb"] = PrivateAttr(default="azure_cosmosdb")
-    top_k: int = Field(default=5, serialization_alias="top_n_documents")
-    strictness: int = 3
-    enable_in_domain: bool = Field(default=True, serialization_alias="in_scope")
-    query_type: Literal['vector'] = "vector"
-    connection_string: str = Field(exclude=True)
-    index: str = Field(serialization_alias="index_name")
-    database: str = Field(serialization_alias="database_name")
-    container: str = Field(serialization_alias="container_name")
-    content_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    vector_columns: Optional[List[str]] = Field(default=None, exclude=True)
-    title_column: Optional[str] = Field(default=None, exclude=True)
-    url_column: Optional[str] = Field(default=None, exclude=True)
-    filename_column: Optional[str] = Field(default=None, exclude=True)
-    
-    # Constructed fields
-    authentication: Optional[dict] = None
-    embedding_dependency: Optional[dict] = None
-    fields_mapping: Optional[dict] = None
-    
-    @field_validator('content_columns', 'vector_columns', mode="before")
-    @classmethod
-    def split_columns(cls, comma_separated_string: str) -> List[str]:
-        if isinstance(comma_separated_string, str) and len(comma_separated_string) > 0:
-            return parse_multi_columns(comma_separated_string)
-        
-        return None
-    
-    @model_validator(mode="after")
-    def construct_authentication(self) -> Self:
-        self.authentication = {
-            "type": "connection_string",
-            "connection_string": self.connection_string
-        }
-        return self
-    
-    @model_validator(mode="after")
-    def set_fields_mapping(self) -> Self:
-        self.fields_mapping = {
-            "content_fields": self.content_columns,
-            "title_field": self.title_column,
-            "url_field": self.url_column,
-            "filepath_field": self.filename_column,
-            "vector_fields": self.vector_columns
-        }
-        return self
-    
-    def construct_payload_configuration(
-        self,
-        *args,
-        **kwargs
-    ):
-        self.embedding_dependency = \
-            self._settings.azure_openai.extract_embedding_dependency()
-        parameters = self.model_dump(exclude_none=True, by_alias=True)
-        parameters.update(self._settings.search.model_dump(exclude_none=True, by_alias=True))
-        return {
-            "type": self._type,
-            "parameters": parameters
-        }        
+       
         
 class _BaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -433,12 +360,7 @@ class _AppSettings(BaseModel):
     
     @model_validator(mode="after")
     def set_chat_history_settings(self) -> Self:
-        try:
-            self.chat_history = _ChatHistorySettings()
-        
-        except ValidationError:
-            self.chat_history = None
-        
+        self.chat_history = None
         return self
     
     @model_validator(mode="after")
@@ -448,9 +370,6 @@ class _AppSettings(BaseModel):
                 self.datasource = _AzureSearchSettings(settings=self, _env_file=DOTENV_PATH)
                 logging.debug("Using Azure Cognitive Search")
             
-            elif self.base_settings.datasource_type == "AzureCosmosDB":
-                self.datasource = _AzureCosmosDbMongoVcoreSettings(settings=self, _env_file=DOTENV_PATH)
-                logging.debug("Using Azure CosmosDB Mongo vcore")
                 
             else:
                 self.datasource = None

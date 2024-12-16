@@ -205,7 +205,6 @@ def convert_to_pf_format(input_json, request_field_name, response_field_name):
     logging.debug(f"PF formatted response: {output_json}")
     return output_json
 
-
 def comma_separated_string_to_list(s: str) -> List[str]:
     '''
     Split comma-separated values into a list.
