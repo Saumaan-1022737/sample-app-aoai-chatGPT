@@ -65,7 +65,7 @@ async def image_resolver(request_body, request_headers):
     system_prompt ="""You are an expert AI assistant specializing in OCR and analysis of images in conjunction with user queries. 
 Your task is to generate a precise query based on the provided image. The image may contain errors or issues faced by the user.
 Use the image and user query to create a clear and comprehensive query for the agent, who does not have access to the images. 
-Always ensure that you include all error messages, error codes/numbers, requests, issues, and critical details from both the image and the user's query necessary for the agent to resolve the issue also engure that the agent feels query directly comes from the user.
+Always ensure that you include all error messages, error codes/numbers, requests, issues, and critical details from both the image and the user's query necessary for the agent to resolve the issue also ensure that the agent feels query directly comes from the user.
 Never provide resolution to user's query, just simplified query at the end and only provide query based on following Schema.
 
 Expected output schema:

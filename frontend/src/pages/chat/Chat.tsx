@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useContext, useLayoutEffect } from 'react'
-import { CommandBarButton, IconButton, Dialog, DialogType, Stack } from '@fluentui/react'
+import { CommandBarButton, IconButton, Dialog, DialogType, Stack, Link } from '@fluentui/react'
 import { SquareRegular, ShieldLockRegular, ErrorCircleRegular } from '@fluentui/react-icons'
 
 import ReactMarkdown from 'react-markdown'
@@ -938,7 +938,7 @@ const Chat = () => {
               </Stack>
               <QuestionInput
                 clearOnSend
-                placeholder="Type a new question..."
+                placeholder="Please enter your question here, ensuring that you do not include any personal information..."
                 disabled={isLoading}
                 onSend={(question, id) => {
                   appStateContext?.state.isCosmosDBAvailable?.cosmosDB
@@ -1037,6 +1037,31 @@ const Chat = () => {
               </Stack>
             </Stack.Item>
           )}
+          {/*
+          <Stack.Item
+            className={styles.dataProtectionPanel}
+            tabIndex={0}
+            role="tabpanel"
+            aria-label="Data Protection Panel"
+            styles={{
+              root: {
+                position: 'fixed', // Sticks to the bottom
+                bottom: 0, // Aligns it to the bottom edge
+                width: '100%', // Makes it span the full width
+                backgroundColor: '#f4f4f4', // Optional: Adjust background color
+                textAlign: 'bottom', // Centers the content horizontally
+                padding: '5px 0', // Adds vertical padding
+        
+              },
+            }}
+          >
+            <p>MS Data Protection Notice:</p>
+            <Link href="http://go.microsoft.com/fwlink/?LinkId=518021" target="_blank">
+              http://go.microsoft.com/fwlink/?LinkId=518021
+            </Link>
+          </Stack.Item> */}
+
+
           {appStateContext?.state.isChatHistoryOpen &&
             appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && <ChatHistoryPanel />}
         </Stack>

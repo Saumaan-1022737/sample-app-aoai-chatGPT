@@ -236,6 +236,24 @@
   flex-grow: 0;
 }
 
+.dataProtectionPanel {
+  position: fixed; /* Fixes the panel position on the screen */
+  bottom: 0; /* Aligns the panel to the bottom */
+  width: 100%; /* Makes the panel stretch horizontally across the screen */
+  background-color: #f4f4f4; /* Optional: Adjust the background color */
+  text-align: center; /* Centers the content */
+  padding: 10px 0; /* Adds spacing around the content */
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1); /* Adds a slight shadow for separation */
+  z-index: 1000; /* Ensures it is above other content */
+}
+
+.dataProtectionPanelContent {
+  margin: 0 auto; /* Centers the content horizontally */
+  max-width: 800px; /* Optional: Limits the width of the panel content */
+  font-size: 14px; /* Adjusts the font size */
+}
+
+
 .citationPanel {
   display: flex;
   flex-direction: column;

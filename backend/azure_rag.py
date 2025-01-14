@@ -173,7 +173,7 @@ Answer: \
         inst_client = instructor.from_openai(await init_openai_client())
 
         response = await inst_client.chat.completions.create(
-                model="ssagpt4o",
+                model=self.chat_model,
                 response_model=DocAnswer,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
@@ -212,7 +212,7 @@ Answer: \
         inst_client = instructor.from_openai(await init_openai_client())
 
         response = await inst_client.chat.completions.create(
-                model="ssagpt4o",
+                model=self.chat_model,
                 response_model=EmailAnswer,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
@@ -252,7 +252,7 @@ citations: ...\
         inst_client = instructor.from_openai(await init_openai_client())
 
         response = await inst_client.chat.completions.create(
-                model="ssagpt4o",
+                model=self.chat_model,
                 response_model=TranscriptAnswer,
                 messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.05
@@ -771,7 +771,7 @@ Answer's from the different source.
     def correct_time_string(self, time_str):
         if time_str == "":
             return time_str
-        # Split the input string on ':'
+        # Split the input string on ':' 
         parts = time_str.split(':')
         # Replace empty strings with '0' to handle cases like ':04'
         parts = [part if part else '0' for part in parts]
