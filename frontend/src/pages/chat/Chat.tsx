@@ -950,6 +950,7 @@ const Chat = () => {
                 }
               />
             </Stack>
+            <a href="https://www.microsoft.com/en-us/privacy/data-privacy-notice" target='_blank'>MS Data Protection Notice</a>
           </div>
           {/* Citation Panel */}
           {messages && messages.length > 0 && isCitationPanelOpen && activeCitation && (
