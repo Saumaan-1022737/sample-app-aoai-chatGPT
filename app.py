@@ -374,6 +374,12 @@ async def conversation():
 
     result = await conversation_internal(request_json, request.headers)
     return result
+ 
+  
+@bp.route('/test', methods=['POST', 'GET'])  
+def test_endpoint():
+    print('123')
+    return jsonify(message="Working")  
 
 
 @bp.route("/frontend_settings", methods=["GET"])
