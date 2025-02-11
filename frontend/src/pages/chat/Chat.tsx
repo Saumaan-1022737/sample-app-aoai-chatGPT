@@ -950,7 +950,12 @@ const Chat = () => {
                 }
               />
             </Stack>
-            <a href="https://www.microsoft.com/en-us/privacy/data-privacy-notice" target='_blank'>MS Data Protection Notice</a>
+            <div style={{ width: '100%', textAlign: 'center', position: 'relative' }}>
+            <span style={{ position: 'absolute', right: '17%' }}>
+              <a href="https://forms.office.com/Pages/ResponsePage.aspx?id=v4j5cvGGr0GRqy180BHbR15sEPtPMuBHlMA4-JSvHapUNERHRURVUDdERE01MkNKUFU4VkE4SEhCNi4u" target='_blank' style={{ fontWeight: 'bold' }}>We're Listening</a>
+            </span>
+            <a href="https://www.microsoft.com/en-us/privacy/data-privacy-notice" target='_blank' style={{ fontWeight: 'bold' }}>MS Data Protection Notice</a>
+            </div>
           </div>
           {/* Citation Panel */}
           {messages && messages.length > 0 && isCitationPanelOpen && activeCitation && (
