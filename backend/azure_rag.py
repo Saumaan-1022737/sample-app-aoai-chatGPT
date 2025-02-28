@@ -291,11 +291,13 @@ citations: ...\
                 self.search(query, 3, self.get_filter_query("video")),  
                 self.search(query, 3, self.get_filter_query("wiki")),  
                 self.search(query, 2, self.get_filter_query("error")),
-                self.search(query, 2, self.get_filter_query("email")),  
+                # self.search(query, 2, self.get_filter_query("email")),  
                 self.search(query, 2, self.get_filter_query("creo_view")),  
                 self.search(query, 2, self.get_filter_query("creo_parametric")),  
             ]
-            contexts_video, contexts_wiki, contexts_error, contexts_email, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+            # contexts_video, contexts_wiki, contexts_error, contexts_email, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+            contexts_video, contexts_wiki, contexts_error, contexts_creo_view, contexts_creo_parametric = await asyncio.gather(*tasks)
+
 
             tasks_2 = [  
                 self.answer_video(query, contexts_video[0]) if len(contexts_video) > 0 else None,
@@ -306,8 +308,8 @@ citations: ...\
                 self.answer_document(query, contexts_wiki[2]) if len(contexts_wiki) > 2 else None,
                 self.answer_document(query, contexts_error[0]) if len(contexts_error) > 0 else None,
                 self.answer_document(query, contexts_error[1]) if len(contexts_error) > 1 else None,
-                self.answer_email(query, contexts_email[0]) if len(contexts_email) > 0 else None,
-                self.answer_email(query, contexts_email[1]) if len(contexts_email) > 1 else None,
+                # self.answer_email(query, contexts_email[0]) if len(contexts_email) > 0 else None,
+                # self.answer_email(query, contexts_email[1]) if len(contexts_email) > 1 else None,
                 self.answer_document(query, contexts_creo_view[0]) if len(contexts_creo_view) > 0 else None,
                 self.answer_document(query, contexts_creo_view[1]) if len(contexts_creo_view) > 1 else None,
                 self.answer_document(query, contexts_creo_parametric[0]) if len(contexts_creo_parametric) > 0 else None,
@@ -316,7 +318,8 @@ citations: ...\
 
             results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
 
-            for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_email + contexts_creo_view + contexts_creo_parametric)):
+            # for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_email + contexts_creo_view + contexts_creo_parametric)):
+            for i, (rest, ctx) in enumerate(zip(results, contexts_video + contexts_wiki + contexts_error + contexts_creo_view + contexts_creo_parametric)):
                 if rest[-1]:
                     n = len(context)
                     source_name = self.get_source_name(ctx)
@@ -330,20 +333,22 @@ citations: ...\
         else:
             tasks = [    
                 self.search(query, 3, self.get_filter_query(rag_filter)),
-                self.search(query, 2, self.get_filter_query("email")),
+                # self.search(query, 2, self.get_filter_query("email")),
                 ]
-            contexts, emails = await asyncio.gather(*tasks)
+            # contexts, emails = await asyncio.gather(*tasks)
+            contexts = await asyncio.gather(*tasks)
             tasks_2 = [
                 self.answer_document(query, contexts[0]) if len(contexts) > 0 else None,
                 self.answer_document(query, contexts[1]) if len(contexts) > 1 else None,
                 self.answer_document(query, contexts[2]) if len(contexts) > 2 else None,
-                self.answer_email(query, emails[0]) if len(emails) > 2 else None,
-                self.answer_email(query, emails[1]) if len(emails) > 2 else None,
+                # self.answer_email(query, emails[0]) if len(emails) > 2 else None,
+                # self.answer_email(query, emails[1]) if len(emails) > 2 else None,
             ]
 
             results = await asyncio.gather(*[task for task in tasks_2 if task is not None])
 
-            for i, (rest, ctx) in enumerate(zip(results, contexts + emails)):
+            # for i, (rest, ctx) in enumerate(zip(results, contexts + emails)):
+            for i, (rest, ctx) in enumerate(zip(results, contexts)):
                 if rest[-1]:
                     n = len(context)
                     source_name = self.get_source_name(ctx)
