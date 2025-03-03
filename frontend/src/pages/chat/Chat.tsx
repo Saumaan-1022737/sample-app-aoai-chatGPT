@@ -954,7 +954,7 @@ const Chat = () => {
             <span style={{ position: 'absolute', right: '17%' }}>
               <a href="https://forms.office.com/r/AAjXDUAbhB" target='_blank' style={{ fontWeight: 'bold' }}>Feedback</a>
             </span>
-            <a href="https://www.microsoft.com/en-us/privacy/data-privacy-notice" target='_blank' style={{ fontWeight: 'bold' }}>MS Data Protection Notice</a>
+            <a href="https://www.microsoft.com/en-us/privacy/data-privacy-notice" target='_blank' style={{ fontWeight: 'bold' }}>Microsoft Data Privacy Notice</a>
             </div>
           </div>
           {/* Citation Panel */}
@@ -1061,7 +1061,7 @@ const Chat = () => {
               },
             }}
           >
-            <p>MS Data Protection Notice:</p>
+            <p>Microsoft Data Privacy Notice:</p>
             <Link href="http://go.microsoft.com/fwlink/?LinkId=518021" target="_blank">
               http://go.microsoft.com/fwlink/?LinkId=518021
             </Link>
